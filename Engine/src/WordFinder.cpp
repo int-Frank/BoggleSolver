@@ -1,31 +1,30 @@
 
 #include <array>
+#include <unordered_map>
 
 #include "WordFinder.h"
+#include "Coord.h"
 
 namespace Engine
 {
-  struct Coord
-  {
-    int X;
-    int Y;
-  };
-
   struct WordFinderContext
   {
     Grid2D<char> const * pCharacterGrid;
     Grid2D<bool> Visited;
     int CurrentLength;
     std::vector<char> CharacterBlock;
+    std::vector<Coord> PathBlock;
     IDictionary::Context const * pDictionaryContext;
     IDictionary const * pDictionary;
-    std::set<std::string> FoundWords;
+    std::vector<WordData> CapturedWords;
+    std::unordered_map<std::string, int> CapturedWordsMap;
 
     WordFinderContext(Grid2D<char> const & characterGrid, IDictionary const * pDictionary)
       : pCharacterGrid(&characterGrid)
       , Visited(characterGrid.Width(), characterGrid.Height(), false)
       , CurrentLength(0)
       , CharacterBlock(characterGrid.Width() * characterGrid.Height())
+      , PathBlock(characterGrid.Width() * characterGrid.Height())
       , pDictionaryContext(nullptr)
       , pDictionary(pDictionary)
     {
@@ -35,15 +34,16 @@ namespace Engine
   static void Process(Coord coord, WordFinderContext * pContext);
   static std::array<Coord, 8> GetSurroundingCoords(Coord coord);
   static std::string_view GetWord(WordFinderContext const * pContext);
+  static void CaptureCurrentWord(WordFinderContext * pContext);
 
-  std::set<std::string> FindWords(Grid2D<char> const & characterGrid,
-                                     int seedX,
-                                     int seedY,
-                                     IDictionary const * pDictionary)
+  std::vector<WordData> FindWords(Grid2D<char> const & characterGrid,
+                                  int seedX,
+                                  int seedY,
+                                  IDictionary const * pDictionary)
   {
     if (seedX < 0 || seedX >= characterGrid.Width() || seedY < 0 || seedY >= characterGrid.Height())
     {
-      return std::set<std::string>();
+      return std::vector<WordData>();
     }
 
     WordFinderContext context(characterGrid, pDictionary);
@@ -55,7 +55,7 @@ namespace Engine
 
     Process(seed, &context);
 
-    return context.FoundWords;
+    return context.CapturedWords;
   }
 
   static void Process(Coord coord, WordFinderContext *pContext)
@@ -69,6 +69,7 @@ namespace Engine
 
     char currentCharacter = pContext->pCharacterGrid->Get(coord.X, coord.Y);
     pContext->CharacterBlock[pContext->CurrentLength] = currentCharacter;
+    pContext->PathBlock[pContext->CurrentLength] = coord;
     pContext->CurrentLength++;
     uint32_t wordCount = 1; // Just needs to be non-zero.
 
@@ -104,8 +105,7 @@ namespace Engine
       auto word = GetWord(pContext);
       if (pContext->pDictionary->IsWord(word, pContext->pDictionaryContext))
       {
-        std::string str(word);
-        pContext->FoundWords.insert(str);
+        CaptureCurrentWord(pContext);
       }
     }
 
@@ -137,5 +137,26 @@ namespace Engine
   static std::string_view GetWord(WordFinderContext const *pContext)
   {
     return std::string_view(pContext->CharacterBlock.data(), pContext->CurrentLength);
+  }
+
+  static void CaptureCurrentWord(WordFinderContext * pContext)
+  {
+    std::string word(GetWord(pContext));
+    std::vector<Coord> path(pContext->PathBlock.begin(), pContext->PathBlock.begin() + pContext->CurrentLength);
+
+    auto it = pContext->CapturedWordsMap.find(word);
+    if (it == pContext->CapturedWordsMap.end())
+    {
+      int index = (int)pContext->CapturedWords.size();
+      pContext->CapturedWordsMap.emplace(word, index);
+
+      WordData data;
+      data.Word = word;
+      data.Locations.push_back(std::move(path));
+      pContext->CapturedWords.push_back(std::move(data));
+      return;
+    }
+
+    pContext->CapturedWords[it->second].Locations.push_back(std::move(path));
   }
 }
