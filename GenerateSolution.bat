@@ -1,0 +1,1 @@
+3rdParty\Premake\premake5.exe vs2022
