@@ -15,8 +15,7 @@ namespace Engine
   public:
     WordSearch(Grid2D<char> const * pGrid, IWorkerPool * pWorkerPool, IDictionary const * pDictionary);
 
-    bool IsDone() const override;
-    std::vector<WordData> TakeResult() override;
+    std::vector<WordData> const * GetResult() const override;
 
   private:
     struct SeedContext
@@ -113,14 +112,12 @@ namespace Engine
     }
   }
 
-  bool WordSearch::IsDone() const
+  std::vector<WordData> const * WordSearch::GetResult() const
   {
-    return m_done.load(std::memory_order_acquire);
-  }
+    if (!m_done.load(std::memory_order_acquire))
+      return nullptr;
 
-  std::vector<WordData> WordSearch::TakeResult()
-  {
-    return std::move(m_results);
+    return &m_results;
   }
 
   void WordSearch::OnSeedComplete()
