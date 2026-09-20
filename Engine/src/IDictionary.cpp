@@ -9,6 +9,8 @@ namespace Engine
   {
   public:
 
+    bool isWord;
+
     // As entries are sorted, these are the indices of the first and last words beginning
     // with the three letters - we save this information for binary searching.
     uint32_t firstEntry;
@@ -64,7 +66,7 @@ namespace Engine
       BuildPrefixMap(3, m_threeLetterWords);
     }
 
-    bool IsWord(std::string_view word, Context const * pContext) const override
+    WordSearchResult Search(std::string_view word, Context const * pContext) const override
     {
       uint32_t first = 0;
       uint32_t last = (uint32_t)m_wordEntryPoints.size();
@@ -78,38 +80,45 @@ namespace Engine
       auto begin = m_wordEntryPoints.cbegin() + first;
       auto end = m_wordEntryPoints.cbegin() + last;
 
-      auto it = std::lower_bound(begin, end, word,
+      auto lowerBound = std::lower_bound(begin, end, word,
         [this](Word const & w, std::string_view target)
         {
           return WordAt(w) < target;
         });
 
-      return it != end && WordAt(*it) == word;
+      if (lowerBound == end)
+        return WordSearchResult{ false, 0 };
+
+      WordSearchResult result;
+      result.IsWord = WordAt(*lowerBound) == word;
+      result.WordsBeginWith = CountWordsStartWith(word, lowerBound, end);
+
+      return result;
     }
 
-    uint32_t WordCount(char c) const override
+    WordSearchResult Search(char c) const override
     {
       uint32_t key = ToKey(c);
 
       auto it = m_oneLetterWords.find(key);
       if (it != m_oneLetterWords.cend())
-        return it->second.Count();
+        return WordSearchResult{it->second.isWord, it->second.Count()};
 
-      return 0;
+      return WordSearchResult{false, 0};
     }
 
-    uint32_t WordCount(char c0, char c1) const override
+    WordSearchResult Search(char c0, char c1) const override
     {
       uint32_t key = ToKey(c0, c1);
 
       auto it = m_twoLetterWords.find(key);
       if (it != m_twoLetterWords.cend())
-        return it->second.Count();
+        return WordSearchResult{ it->second.isWord, it->second.Count() };
 
-      return 0;
+      return WordSearchResult{ false, 0 };
     }
 
-    uint32_t WordCount(char c0, char c1, char c2, Context const ** ppContext) const override
+    WordSearchResult Search(char c0, char c1, char c2, Context const ** ppContext) const override
     {
       uint32_t key = ToKey(c0, c1, c2);
 
@@ -118,15 +127,37 @@ namespace Engine
       {
         if (ppContext)
           *ppContext = &it->second;
-        return it->second.Count();
+        return WordSearchResult{ it->second.isWord, it->second.Count() };
       }
 
       if (ppContext)
         *ppContext = nullptr;
-      return 0;
+      return WordSearchResult{ false, 0 };
     }
 
   private:
+
+    // lower_bound(prefix) lands on the lexicographically smallest entry that is
+    // either equal to prefix or extends it - since a string always sorts before
+    // any of its own extensions, every entry sharing this prefix forms a
+    // contiguous run starting exactly there, so we only ever need to scan forward.
+    uint32_t CountWordsStartWith(std::string_view prefix,
+                                  std::vector<Word>::const_iterator first,
+                                  std::vector<Word>::const_iterator last) const
+    {
+      uint32_t count = 0;
+
+      for (auto it = first; it != last; ++it)
+      {
+        std::string_view candidate = WordAt(*it);
+        if (candidate.size() < prefix.size() || candidate.substr(0, prefix.size()) != prefix)
+          break;
+
+        count++;
+      }
+
+      return count;
+    }
 
     std::string_view WordAt(Word const & w) const
     {
@@ -165,6 +196,7 @@ namespace Engine
         }
 
         Context context{};
+        context.isWord = word.size() == prefixLength;
         context.firstEntry = i;
         context.lastEntry = j;
         map.emplace(ToKey(prefix), context);

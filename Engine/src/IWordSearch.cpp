@@ -55,10 +55,14 @@ namespace Engine
                                                     int seedX,
                                                     int seedY,
                                                     IDictionary const * pDictionary);
-    static void ProcessSeed(Coord coord, SeedContext * pContext);
+
+    // Returns newly found words from the current sequence
+    static uint32_t ProcessSeed(Coord coord, SeedContext * pContext);
     static std::array<Coord, 8> GetSurroundingCoords(Coord coord);
     static std::string_view GetWord(SeedContext const * pContext);
-    static void CaptureCurrentWord(SeedContext * pContext);
+
+    // Returns true if the word has previously been captured
+    static bool CaptureCurrentWord(SeedContext * pContext);
 
     static void RunSeedTask(void * pUserData) noexcept;
     static void MergeSeedTask(void * pUserData) noexcept;
@@ -193,32 +197,33 @@ namespace Engine
     return context.CapturedWords;
   }
 
-  void WordSearch::ProcessSeed(Coord coord, SeedContext * pContext)
+  uint32_t WordSearch::ProcessSeed(Coord coord, SeedContext * pContext)
   {
     if (coord.X < 0 || coord.X >= pContext->pCharacterGrid->Width() ||
       coord.Y < 0 || coord.Y >= pContext->pCharacterGrid->Height() ||
         pContext->Visited.Get(coord))
     {
-      return;
+      return 0;
     }
 
     char currentCharacter = pContext->pCharacterGrid->Get(coord);
     pContext->CharacterBlock[pContext->CurrentLength] = currentCharacter;
     pContext->PathBlock[pContext->CurrentLength] = coord;
     pContext->CurrentLength++;
-    uint32_t wordCount = 1; // Just needs to be non-zero.
+    uint32_t maxWordCount = 0;
+    uint32_t capturedWords = 0;
 
     if (pContext->CurrentLength == 1)
     {
       char c = pContext->CharacterBlock[0];
-      wordCount = pContext->pDictionary->WordCount(c);
+      maxWordCount = pContext->pDictionary->Search(c).WordsBeginWith;
     }
 
     else if (pContext->CurrentLength == 2)
     {
       char c0 = pContext->CharacterBlock[0];
       char c1 = pContext->CharacterBlock[1];
-      wordCount = pContext->pDictionary->WordCount(c0, c1);
+      maxWordCount = pContext->pDictionary->Search(c0, c1).WordsBeginWith;
     }
 
     else if (pContext->CurrentLength == 3)
@@ -226,32 +231,50 @@ namespace Engine
       char c0 = pContext->CharacterBlock[0];
       char c1 = pContext->CharacterBlock[1];
       char c2 = pContext->CharacterBlock[2];
-      wordCount = pContext->pDictionary->WordCount(c0, c1, c2, &pContext->pDictionaryContext);
+      auto result = pContext->pDictionary->Search(c0, c1, c2, &pContext->pDictionaryContext);
+
+      if (result.IsWord && !CaptureCurrentWord(pContext))
+      {
+        capturedWords++;
+      }
+
+      maxWordCount = result.WordsBeginWith;
     }
 
-    if (wordCount == 0)
-    {
-      pContext->CurrentLength--;
-      return;
-    }
-
-    if (pContext->CurrentLength >= 3)
+    else //(pContext->CurrentLength > 3)
     {
       auto word = GetWord(pContext);
-      if (pContext->pDictionary->IsWord(word, pContext->pDictionaryContext))
+      auto result = pContext->pDictionary->Search(word, pContext->pDictionaryContext);
+
+      if (result.IsWord && !CaptureCurrentWord(pContext))
       {
-        CaptureCurrentWord(pContext);
+        capturedWords++;
       }
+
+      maxWordCount = result.WordsBeginWith;
+    }
+
+    if (maxWordCount == 0)
+    {
+      pContext->CurrentLength--;
+      return 0;
     }
 
     pContext->Visited.Set(coord, true);
     auto surroundingCoords = GetSurroundingCoords(coord);
     for (auto nextCoord : surroundingCoords)
     {
-      ProcessSeed(nextCoord, pContext);
+      capturedWords += ProcessSeed(nextCoord, pContext);
+
+      // If we have found all the words which begin with this sequence,
+      // there is no need to continue.
+      if (capturedWords == maxWordCount)
+        break;
     }
     pContext->CurrentLength--;
     pContext->Visited.Set(coord, false);
+
+    return capturedWords;
   }
 
   std::array<Coord, 8> WordSearch::GetSurroundingCoords(Coord coord)
@@ -274,7 +297,7 @@ namespace Engine
     return std::string_view(pContext->CharacterBlock.data(), pContext->CurrentLength);
   }
 
-  void WordSearch::CaptureCurrentWord(SeedContext * pContext)
+  bool WordSearch::CaptureCurrentWord(SeedContext * pContext)
   {
     std::string word(GetWord(pContext));
     std::vector<Coord> path(pContext->PathBlock.begin(), pContext->PathBlock.begin() + pContext->CurrentLength);
@@ -289,10 +312,11 @@ namespace Engine
       data.Word = word;
       data.Locations.push_back(std::move(path));
       pContext->CapturedWords.push_back(std::move(data));
-      return;
+      return false;
     }
 
     pContext->CapturedWords[it->second].Locations.push_back(std::move(path));
+    return true;
   }
 
   bool WordSearch::IsReversePath(std::vector<Coord> const & a, std::vector<Coord> const & b)
