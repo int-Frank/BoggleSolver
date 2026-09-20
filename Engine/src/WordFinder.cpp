@@ -211,14 +211,55 @@ namespace Engine
     delete static_cast<MultiSeedTask *>(pUserData);
   }
 
-  static std::vector<WordData> ReducePallindromes(std::vector<WordData> results)
+  static bool IsReversePath(std::vector<Coord> const & a, std::vector<Coord> const & b)
+  {
+    if (a.size() != b.size())
+      return false;
+
+    size_t count = a.size();
+    for (size_t i = 0; i < count; i++)
+    {
+      Coord const & fromEnd = b[count - 1 - i];
+      if (a[i].X != fromEnd.X || a[i].Y != fromEnd.Y)
+        return false;
+    }
+
+    return true;
+  }
+
+  static std::vector<WordData> RemovePallindromes(std::vector<WordData> results)
   {
     // For each word, find any location sequences which are the same forward as backward and elimate one
+    for (WordData & wordData : results)
+    {
+      std::vector<std::vector<Coord>> keptLocations;
+      keptLocations.reserve(wordData.Locations.size());
+
+      for (auto & path : wordData.Locations)
+      {
+        bool isDuplicateReverse = false;
+        for (auto const & keptPath : keptLocations)
+        {
+          if (IsReversePath(path, keptPath))
+          {
+            isDuplicateReverse = true;
+            break;
+          }
+        }
+
+        if (!isDuplicateReverse)
+          keptLocations.push_back(std::move(path));
+      }
+
+      wordData.Locations = std::move(keptLocations);
+    }
+
+    return results;
   }
 
   static std::vector<WordData> Clean(std::vector<WordData> results)
   {
-    return ReducePallindromes(results);
+    return RemovePallindromes(results);
   }
 
   std::vector<WordData> FindWords(Grid2D<char> const & grid,
