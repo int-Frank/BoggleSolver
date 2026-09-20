@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <set>
 
 namespace Engine
@@ -28,9 +29,9 @@ namespace Engine
     // We don't need to continue if for example no 'frg' words exist
     // The idea here is that we have a has map of all the three letter combinations which are, or begin a word.
     // From here, the word finder will continue to add letters to try to 
-    virtual size_t WordCount(char, char, char, Context const ** pEntry) const = 0;
+    virtual size_t WordCount(char, char, char, Context const ** ppContext) const = 0;
 
-    virtual bool IsWord(std::string_view word, Context const * entry) const = 0;
+    virtual bool IsWord(std::string_view word, Context const * pContext) const = 0;
   };
 }
 
