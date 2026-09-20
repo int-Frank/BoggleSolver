@@ -61,6 +61,10 @@ namespace Engine
     static std::array<Coord, 8> GetSurroundingCoords(Coord coord);
     static std::string_view GetWord(SeedContext const * pContext);
 
+    // Dictionary entries store 'q' as a stand-in for 'qu' (see Dictionary::Dictionary) -
+    // expand it back before the word is captured.
+    static std::string ExpandQu(std::string_view word);
+
     // Returns true if the word has previously been captured
     static bool CaptureCurrentWord(SeedContext * pContext);
 
@@ -297,9 +301,24 @@ namespace Engine
     return std::string_view(pContext->CharacterBlock.data(), pContext->CurrentLength);
   }
 
+  std::string WordSearch::ExpandQu(std::string_view word)
+  {
+    std::string result;
+    result.reserve(word.size());
+
+    for (char c : word)
+    {
+      result.push_back(c);
+      if (c == 'q')
+        result.push_back('u');
+    }
+
+    return result;
+  }
+
   bool WordSearch::CaptureCurrentWord(SeedContext * pContext)
   {
-    std::string word(GetWord(pContext));
+    std::string word = ExpandQu(GetWord(pContext));
     std::vector<Coord> path(pContext->PathBlock.begin(), pContext->PathBlock.begin() + pContext->CurrentLength);
 
     auto it = pContext->CapturedWordsMap.find(word);

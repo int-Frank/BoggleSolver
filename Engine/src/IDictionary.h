@@ -21,6 +21,8 @@ namespace Engine
       uint32_t WordsBeginWith;
     };
 
+    // Words containing a 'q' not immediatly followed by a 'u' are ignored.
+    // 'qu' is registerd as a single 'q'.
     static IDictionary * Create(std::set<std::string> const & words);
 
     virtual ~IDictionary() = default;

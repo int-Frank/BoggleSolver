@@ -41,6 +41,12 @@ namespace Engine
 
     Dictionary(std::set<std::string> const & words)
     {
+      // Words are stored with 'u' dropped after every 'q', since a Boggle die never
+      // shows a bare 'q' - it always shows "qu". Words that can't be spelled with such
+      // a die (a 'q' not followed by 'u') are skipped entirely.
+      //
+      // totalChars/words.size() are upper bounds (skipped words and dropped 'u's only
+      // make the real totals smaller), which is fine - reserve() just needs a bound.
       size_t totalChars = 0;
       for (std::string const & word : words)
         totalChars += word.size();
@@ -48,16 +54,22 @@ namespace Engine
       m_wordCharacters.reserve(totalChars);
       m_wordEntryPoints.reserve(words.size());
 
-      // std::set already iterates in sorted (lexicographic) order, which is
-      // exactly the ordering IsWord's binary search and the prefix maps
-      // below rely on - no separate sort step needed.
       for (std::string const & word : words)
       {
+        if (!IsValid(word))
+          continue;
+
         Word entry{};
         entry.index = (uint32_t)m_wordCharacters.size();
-        entry.length = (uint32_t)word.size();
 
-        m_wordCharacters.insert(m_wordCharacters.end(), word.begin(), word.end());
+        for (size_t i = 0; i < word.size(); i++)
+        {
+          m_wordCharacters.push_back(word[i]);
+          if (word[i] == 'q')
+            i++; // Skip the 'u' that IsSpellableWithQuDie guaranteed follows.
+        }
+
+        entry.length = (uint32_t)(m_wordCharacters.size() - entry.index);
         m_wordEntryPoints.push_back(entry);
       }
 
@@ -136,6 +148,20 @@ namespace Engine
     }
 
   private:
+
+    // Hard-coded rules for validating words
+    static bool IsValid(std::string_view word)
+    {
+      // A Boggle Qu die always contributes "qu", never a bare 'q' - so a word can only
+      // be spelled if every 'q' in it is immediately followed by a 'u'.
+      for (size_t i = 0; i < word.size(); i++)
+      {
+        if (word[i] == 'q' && (i + 1 >= word.size() || word[i + 1] != 'u'))
+          return false;
+      }
+
+      return true;
+    }
 
     // lower_bound(prefix) lands on the lexicographically smallest entry that is
     // either equal to prefix or extends it - since a string always sorts before
