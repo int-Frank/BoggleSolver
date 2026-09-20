@@ -62,12 +62,12 @@ namespace Engine
   {
     if (coord.X < 0 || coord.X >= pContext->pCharacterGrid->Width() ||
       coord.Y < 0 || coord.Y >= pContext->pCharacterGrid->Height() ||
-        pContext->Visited.Get(coord.X, coord.Y))
+        pContext->Visited.Get(coord))
     {
       return;
     }
 
-    char currentCharacter = pContext->pCharacterGrid->Get(coord.X, coord.Y);
+    char currentCharacter = pContext->pCharacterGrid->Get(coord);
     pContext->CharacterBlock[pContext->CurrentLength] = currentCharacter;
     pContext->PathBlock[pContext->CurrentLength] = coord;
     pContext->CurrentLength++;
@@ -109,14 +109,14 @@ namespace Engine
       }
     }
 
-    pContext->Visited.Set(coord.X, coord.Y, true);
+    pContext->Visited.Set(coord, true);
     auto surroundingCoords = GetSurroundingCoords(coord);
     for (auto nextCoord : surroundingCoords)
     {
       Process(nextCoord, pContext);
     }
     pContext->CurrentLength--;
-    pContext->Visited.Set(coord.X, coord.Y, false);
+    pContext->Visited.Set(coord, false);
   }
 
   static std::array<Coord, 8> GetSurroundingCoords(Coord coord)

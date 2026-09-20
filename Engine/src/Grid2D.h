@@ -4,6 +4,8 @@
 #include <vector>
 #include <stdexcept>
 
+#include "Coord.h"
+
 namespace Engine
 {
   template<typename T>
@@ -37,24 +39,24 @@ namespace Engine
     }
 
     // Throws std::out_of_range if invalid coordinates
-    T Get(int x, int y) const
+    T Get(Coord coord) const
     {
-      ValidateCoord(x, y);
-      return m_elements[(size_t)y * m_width + x];
+      ValidateCoord(coord);
+      return m_elements[(size_t)coord.Y * m_width + coord.X];
     }
 
     // Throws std::out_of_range if invalid coordinates
-    void Set(int x, int y, T value)
+    void Set(Coord coord, T value)
     {
-      ValidateCoord(x, y);
-      m_elements[(size_t)y * m_width + x] = value;
+      ValidateCoord(coord);
+      m_elements[(size_t)coord.Y * m_width + coord.X] = value;
     }
 
   private:
 
-    void ValidateCoord(int x, int y) const
+    void ValidateCoord(Coord coord) const
     {
-      if (x < 0 || x >= m_width || y < 0 || y >= m_height)
+      if (coord.X < 0 || coord.X >= m_width || coord.Y < 0 || coord.Y >= m_height)
         throw std::out_of_range("Grid2D coordinates out of range");
     }
   };
