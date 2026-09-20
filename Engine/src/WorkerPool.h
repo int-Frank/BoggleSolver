@@ -16,6 +16,7 @@ namespace Engine
   {
   public:
 
+    // Returns nullptr on failure
     static IWorkerPool * Create(int a_totalThreads);
 
     virtual ~IWorkerPool() = default;

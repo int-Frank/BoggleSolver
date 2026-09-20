@@ -30,6 +30,18 @@ namespace Engine
     std::queue<WorkerPoolTask> m_queuedPostTasks;
     std::vector<std::thread> m_workerThreads;
 
+    void StopAndJoinWorkers()
+    {
+      {
+        std::unique_lock<std::mutex> lock(m_queuedTasksMutex);
+        m_shouldQuit = true;
+      }
+
+      m_cv.notify_all();
+      for (std::thread & worker : m_workerThreads)
+        worker.join();
+    }
+
   public:
 
     WorkerPool(int a_totalThreads)
@@ -37,10 +49,12 @@ namespace Engine
       if (a_totalThreads < 1)
         a_totalThreads = 1;
 
-      for (int i = 0; i < a_totalThreads; i++)
+      try
       {
-        m_workerThreads.emplace_back([this]
-          {
+        for (int i = 0; i < a_totalThreads; i++)
+        {
+          m_workerThreads.emplace_back([this]
+            {
             while (!m_shouldQuit)
             {
               ++m_threadsWaiting;
@@ -86,19 +100,18 @@ namespace Engine
               }
             }
           });
+        }
+      }
+      catch (...)
+      {
+        StopAndJoinWorkers();
+        throw;
       }
     }
 
     ~WorkerPool() override
     {
-      {
-        std::unique_lock<std::mutex> lock(m_queuedTasksMutex);
-        m_shouldQuit = true;
-      }
-
-      m_cv.notify_all();
-      for (std::thread & worker : m_workerThreads)
-        worker.join();
+      StopAndJoinWorkers();
 
       // Any tasks left in these queues were never run to completion, so their
       // postFunction (if any) is skipped, but we still need to release pUserData.
@@ -185,6 +198,13 @@ namespace Engine
 
   IWorkerPool * IWorkerPool::Create(int a_totalThreads)
   {
-    return new WorkerPool(a_totalThreads);
+    try
+    {
+      return new WorkerPool(a_totalThreads);
+    }
+    catch (...)
+    {
+      return nullptr;
+    }
   }
 }
