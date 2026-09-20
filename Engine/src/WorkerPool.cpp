@@ -5,7 +5,7 @@
 #include <thread>
 #include <condition_variable>
 #include <vector>
-#include <list>
+#include <queue>
 
 #include "WorkerPool.h"
 
@@ -26,8 +26,8 @@ namespace Engine
     std::mutex m_queuedTasksMutex;
     std::mutex m_queuedPostTasksMutex;
     std::condition_variable m_cv;
-    std::list<WorkerPoolTask> m_queuedTasks;
-    std::list<WorkerPoolTask> m_queuedPostTasks;
+    std::queue<WorkerPoolTask> m_queuedTasks;
+    std::queue<WorkerPoolTask> m_queuedPostTasks;
     std::vector<std::thread> m_workerThreads;
 
   public:
@@ -57,7 +57,7 @@ namespace Engine
                   break;
 
                 temp = m_queuedTasks.front();
-                m_queuedTasks.pop_front();
+                m_queuedTasks.pop();
               }
 
               temp.function(temp.pUserData);
@@ -69,7 +69,7 @@ namespace Engine
                 // TODO push_back can fail. It should return a ErrorCode and handled here.
                 // If push_back throws, this thread will never increment threadsWaiting,
                 // and will seem as if it is always working.
-                m_queuedPostTasks.push_back(temp);
+                m_queuedPostTasks.push(temp);
               }
               else if (temp.freeFunction != nullptr)
               {
@@ -90,6 +90,24 @@ namespace Engine
       m_cv.notify_all();
       for (std::thread & worker : m_workerThreads)
         worker.join();
+
+      // Any tasks left in these queues were never run to completion, so their
+      // postFunction (if any) is skipped, but we still need to release pUserData.
+      while (!m_queuedTasks.empty())
+      {
+        WorkerPoolTask & task = m_queuedTasks.front();
+        if (task.freeFunction != nullptr)
+          task.freeFunction(task.pUserData);
+        m_queuedTasks.pop();
+      }
+
+      while (!m_queuedPostTasks.empty())
+      {
+        WorkerPoolTask & task = m_queuedPostTasks.front();
+        if (task.freeFunction != nullptr)
+          task.freeFunction(task.pUserData);
+        m_queuedPostTasks.pop();
+      }
     }
 
     ErrorCode AddTask(WorkerPoolCallback a_func, void * a_pUserData, WorkerPoolCallback a_freeFunction, WorkerPoolCallback a_postFunction) override
@@ -102,7 +120,7 @@ namespace Engine
 
       {
         std::unique_lock<std::mutex> lock(m_queuedTasksMutex);
-        m_queuedTasks.push_back(temp);
+        m_queuedTasks.push(temp);
       }
 
       m_cv.notify_one();
@@ -122,7 +140,7 @@ namespace Engine
           if (!m_queuedPostTasks.empty())
           {
             temp = m_queuedPostTasks.front();
-            m_queuedPostTasks.pop_front();
+            m_queuedPostTasks.pop();
             newTask = true;
           }
         }
