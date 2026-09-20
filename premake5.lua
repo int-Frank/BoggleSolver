@@ -1,5 +1,7 @@
-workspace "DgEngineSamples"
+workspace "BoggleSolver"
   architecture "x64"
+  configurations {"Debug", "Release"}
+  startproject "Application"
 
   project "Engine"
     location "Engine"
@@ -9,42 +11,58 @@ workspace "DgEngineSamples"
     systemversion "latest"
     language "C++"
     cppdialect "C++20"
-    flags {"FatalWarnings"}
-  
-    files 
+    warnings "Extra"
+    fatalwarnings "All"
+
+    files
     {
       "Engine/src/**.h",
       "Engine/src/**.cpp",
     }
 
     filter "configurations:Debug"
-	  runtime "Debug"
-	  symbols "on"
+      runtime "Debug"
+      staticruntime "on"
+      symbols "on"
 
-	filter "configurations:Release"
-	  runtime "Release"
-	  optimize "on"
-    
+    filter "configurations:Release"
+      runtime "Release"
+      staticruntime "on"
+      optimize "on"
+
   project "Application"
     location "Application"
-    kind "StaticLib"
+    kind "ConsoleApp"
     targetdir ("%{wks.location}/build/%{prj.name}-%{cfg.buildcfg}")
     objdir ("%{wks.location}/build/intermediate/%{prj.name}-%{cfg.buildcfg}")
     systemversion "latest"
     language "C++"
     cppdialect "C++20"
-    flags {"FatalWarnings"}
-    
-    files 
+    warnings "Extra"
+    fatalwarnings "All"
+
+    files
     {
       "Application/src/**.h",
       "Application/src/**.cpp",
     }
 
-    filter "configurations:Debug"
-	  runtime "Debug"
-	  symbols "on"
+    includedirs
+    {
+      "Engine/src",
+    }
 
-	filter "configurations:Release"
-	  runtime "Release"
-	  optimize "on"
+    links
+    {
+      "Engine",
+    }
+
+    filter "configurations:Debug"
+      runtime "Debug"
+      staticruntime "on"
+      symbols "on"
+
+    filter "configurations:Release"
+      runtime "Release"
+      staticruntime "on"
+      optimize "on"
