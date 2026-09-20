@@ -11,10 +11,10 @@ namespace Engine
 
     // As entries are sorted, these are the indices of the first and last words beginning
     // with the three letters - we save this information for binary searching.
-    size_t firstEntry;
-    size_t lastEntry;
+    uint32_t firstEntry;
+    uint32_t lastEntry;
 
-    size_t Count() const
+    uint32_t Count() const
     {
       return lastEntry - firstEntry;
     }
@@ -66,8 +66,8 @@ namespace Engine
 
     bool IsWord(std::string_view word, Context const * pContext) const override
     {
-      size_t first = 0;
-      size_t last = m_wordEntryPoints.size();
+      uint32_t first = 0;
+      uint32_t last = (uint32_t)m_wordEntryPoints.size();
 
       if (pContext)
       {
@@ -87,7 +87,7 @@ namespace Engine
       return it != end && WordAt(*it) == word;
     }
 
-    size_t WordCount(char c) const override
+    uint32_t WordCount(char c) const override
     {
       uint32_t key = ToKey(c);
 
@@ -98,7 +98,7 @@ namespace Engine
       return 0;
     }
 
-    size_t WordCount(char c0, char c1) const override
+    uint32_t WordCount(char c0, char c1) const override
     {
       uint32_t key = ToKey(c0, c1);
 
@@ -109,7 +109,7 @@ namespace Engine
       return 0;
     }
 
-    size_t WordCount(char c0, char c1, char c2, Context const ** ppContext) const override
+    uint32_t WordCount(char c0, char c1, char c2, Context const ** ppContext) const override
     {
       uint32_t key = ToKey(c0, c1, c2);
 
@@ -140,8 +140,8 @@ namespace Engine
     // prefix maps and the full IsWord binary search.
     void BuildPrefixMap(size_t prefixLength, std::unordered_map<uint32_t, Context> & map)
     {
-      size_t count = m_wordEntryPoints.size();
-      size_t i = 0;
+      uint32_t count = (uint32_t)m_wordEntryPoints.size();
+      uint32_t i = 0;
 
       while (i < count)
       {
@@ -155,7 +155,7 @@ namespace Engine
 
         std::string_view prefix = word.substr(0, prefixLength);
 
-        size_t j = i + 1;
+        uint32_t j = i + 1;
         while (j < count)
         {
           std::string_view next = WordAt(m_wordEntryPoints[j]);
@@ -201,7 +201,6 @@ namespace Engine
       }
     }
   };
-
 
   IDictionary * IDictionary::Create(std::set<std::string> const & words)
   {
