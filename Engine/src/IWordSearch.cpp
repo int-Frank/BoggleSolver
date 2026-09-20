@@ -3,16 +3,17 @@
 #include <atomic>
 #include <unordered_map>
 
-#include "WordFinder.h"
+#include "IWordSearch.h"
 #include "Coord.h"
 #include "IWorkerPool.h"
+#include "IDictionary.h"
 
 namespace Engine
 {
-  class FindWordsTask : public IFindWordsTask
+  class WordSearch : public IWordSearch
   {
   public:
-    FindWordsTask(Grid2D<char> const * pGrid, IWorkerPool * pWorkerPool, IDictionary const * pDictionary);
+    WordSearch(Grid2D<char> const * pGrid, IWorkerPool * pWorkerPool, IDictionary const * pDictionary);
 
     bool IsDone() const override;
     std::vector<WordData> TakeResult() override;
@@ -47,7 +48,7 @@ namespace Engine
       Grid2D<char> const * pGrid;
       Coord Seed;
       IDictionary const * pDictionary;
-      FindWordsTask * pOwner;
+      WordSearch * pOwner;
       std::vector<WordData> Result;
     };
 
@@ -76,14 +77,14 @@ namespace Engine
     std::unordered_map<std::string, int> m_wordEntries;
   };
 
-  IFindWordsTask * IFindWordsTask::Begin(Grid2D<char> const * pGrid,
+  IWordSearch * IWordSearch::Begin(Grid2D<char> const * pGrid,
                                           IWorkerPool * pWorkerPool,
                                           IDictionary const * pDictionary)
   {
-    return new FindWordsTask(pGrid, pWorkerPool, pDictionary);
+    return new WordSearch(pGrid, pWorkerPool, pDictionary);
   }
 
-  FindWordsTask::FindWordsTask(Grid2D<char> const * pGrid, IWorkerPool * pWorkerPool, IDictionary const * pDictionary)
+  WordSearch::WordSearch(Grid2D<char> const * pGrid, IWorkerPool * pWorkerPool, IDictionary const * pDictionary)
   {
     int totalSeeds = pGrid->Width() * pGrid->Height();
     m_pending.store(totalSeeds, std::memory_order_relaxed);
@@ -105,24 +106,24 @@ namespace Engine
         {
           delete pTask;
           // This seed will never run/merge, so account for it here or
-          // m_pending would never reach zero and the task would hang forever.
+          // m_pending would never reach zero and the search would hang forever.
           OnSeedComplete();
         }
       }
     }
   }
 
-  bool FindWordsTask::IsDone() const
+  bool WordSearch::IsDone() const
   {
     return m_done.load(std::memory_order_acquire);
   }
 
-  std::vector<WordData> FindWordsTask::TakeResult()
+  std::vector<WordData> WordSearch::TakeResult()
   {
     return std::move(m_results);
   }
 
-  void FindWordsTask::OnSeedComplete()
+  void WordSearch::OnSeedComplete()
   {
     if (m_pending.fetch_sub(1, std::memory_order_acq_rel) == 1)
     {
@@ -131,7 +132,7 @@ namespace Engine
     }
   }
 
-  void FindWordsTask::MergeResult(std::vector<WordData> & seedResult)
+  void WordSearch::MergeResult(std::vector<WordData> & seedResult)
   {
     for (WordData & wordData : seedResult)
     {
@@ -150,7 +151,7 @@ namespace Engine
     }
   }
 
-  void FindWordsTask::RunSeedTask(void * pUserData) noexcept
+  void WordSearch::RunSeedTask(void * pUserData) noexcept
   {
     SeedTask * pTask = static_cast<SeedTask *>(pUserData);
     pTask->Result = FindWordsForSeed(pTask->pGrid, pTask->Seed.X, pTask->Seed.Y, pTask->pDictionary);
@@ -158,22 +159,22 @@ namespace Engine
 
   // Runs on whichever single thread drives the shared IWorkerPool's DoPostWork(),
   // so m_results/m_wordEntries need no locking - as long as only that one thread
-  // ever calls DoPostWork() on the pool, merges for this task never overlap.
-  void FindWordsTask::MergeSeedTask(void * pUserData) noexcept
+  // ever calls DoPostWork() on the pool, merges for this search never overlap.
+  void WordSearch::MergeSeedTask(void * pUserData) noexcept
   {
     SeedTask * pTask = static_cast<SeedTask *>(pUserData);
-    FindWordsTask * pOwner = pTask->pOwner;
+    WordSearch * pOwner = pTask->pOwner;
 
     pOwner->MergeResult(pTask->Result);
     pOwner->OnSeedComplete();
   }
 
-  void FindWordsTask::FreeSeedTask(void * pUserData) noexcept
+  void WordSearch::FreeSeedTask(void * pUserData) noexcept
   {
     delete static_cast<SeedTask *>(pUserData);
   }
 
-  std::vector<WordData> FindWordsTask::FindWordsForSeed(Grid2D<char> const * pCharacterGrid,
+  std::vector<WordData> WordSearch::FindWordsForSeed(Grid2D<char> const * pCharacterGrid,
                                                           int seedX,
                                                           int seedY,
                                                           IDictionary const * pDictionary)
@@ -195,7 +196,7 @@ namespace Engine
     return context.CapturedWords;
   }
 
-  void FindWordsTask::ProcessSeed(Coord coord, SeedContext * pContext)
+  void WordSearch::ProcessSeed(Coord coord, SeedContext * pContext)
   {
     if (coord.X < 0 || coord.X >= pContext->pCharacterGrid->Width() ||
       coord.Y < 0 || coord.Y >= pContext->pCharacterGrid->Height() ||
@@ -256,7 +257,7 @@ namespace Engine
     pContext->Visited.Set(coord, false);
   }
 
-  std::array<Coord, 8> FindWordsTask::GetSurroundingCoords(Coord coord)
+  std::array<Coord, 8> WordSearch::GetSurroundingCoords(Coord coord)
   {
     return
     {
@@ -271,12 +272,12 @@ namespace Engine
     };
   }
 
-  std::string_view FindWordsTask::GetWord(SeedContext const * pContext)
+  std::string_view WordSearch::GetWord(SeedContext const * pContext)
   {
     return std::string_view(pContext->CharacterBlock.data(), pContext->CurrentLength);
   }
 
-  void FindWordsTask::CaptureCurrentWord(SeedContext * pContext)
+  void WordSearch::CaptureCurrentWord(SeedContext * pContext)
   {
     std::string word(GetWord(pContext));
     std::vector<Coord> path(pContext->PathBlock.begin(), pContext->PathBlock.begin() + pContext->CurrentLength);
@@ -297,7 +298,7 @@ namespace Engine
     pContext->CapturedWords[it->second].Locations.push_back(std::move(path));
   }
 
-  bool FindWordsTask::IsReversePath(std::vector<Coord> const & a, std::vector<Coord> const & b)
+  bool WordSearch::IsReversePath(std::vector<Coord> const & a, std::vector<Coord> const & b)
   {
     if (a.size() != b.size())
       return false;
@@ -313,7 +314,7 @@ namespace Engine
     return true;
   }
 
-  std::vector<WordData> FindWordsTask::RemovePalindromes(std::vector<WordData> results)
+  std::vector<WordData> WordSearch::RemovePalindromes(std::vector<WordData> results)
   {
     // For each word, find any location sequences which are the same forward as backward and eliminate one
     for (WordData & wordData : results)
