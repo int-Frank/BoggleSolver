@@ -5,7 +5,8 @@ namespace Engine
 {
   enum class ErrorCode
   {
-    None
+    None,
+    OutOfMemory
   };
 }
 

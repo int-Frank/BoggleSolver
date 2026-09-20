@@ -62,16 +62,25 @@ namespace Engine
 
               temp.function(temp.pUserData);
 
+              bool queuedForPostWork = false;
+
               if (temp.postFunction != nullptr)
               {
                 std::unique_lock<std::mutex> lock(m_queuedPostTasksMutex);
 
-                // TODO push_back can fail. It should return a ErrorCode and handled here.
-                // If push_back throws, this thread will never increment threadsWaiting,
-                // and will seem as if it is always working.
-                m_queuedPostTasks.push(temp);
+                try
+                {
+                  m_queuedPostTasks.push(temp);
+                  queuedForPostWork = true;
+                }
+                catch (...)
+                {
+                  // Couldn't queue the post-work; fall through and at least
+                  // release pUserData below instead of leaking it.
+                }
               }
-              else if (temp.freeFunction != nullptr)
+
+              if (!queuedForPostWork && temp.freeFunction != nullptr)
               {
                 temp.freeFunction(temp.pUserData);
               }
@@ -120,7 +129,15 @@ namespace Engine
 
       {
         std::unique_lock<std::mutex> lock(m_queuedTasksMutex);
-        m_queuedTasks.push(temp);
+
+        try
+        {
+          m_queuedTasks.push(temp);
+        }
+        catch (...)
+        {
+          return ErrorCode::OutOfMemory;
+        }
       }
 
       m_cv.notify_one();
