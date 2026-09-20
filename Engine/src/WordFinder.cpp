@@ -1,9 +1,11 @@
 
 #include <array>
 #include <unordered_map>
+#include <thread>
 
 #include "WordFinder.h"
 #include "Coord.h"
+#include "IWorkerPool.h"
 
 namespace Engine
 {
@@ -158,5 +160,108 @@ namespace Engine
     }
 
     pContext->CapturedWords[it->second].Locations.push_back(std::move(path));
+  }
+
+  struct MultiSeedContext
+  {
+    std::vector<WordData> * pResults;
+    std::unordered_map<std::string, int> * pWordEntries;
+  };
+
+  struct MultiSeedTask
+  {
+    Grid2D<char> const * pGrid;
+    Coord Seed;
+    IDictionary const * pDictionary;
+    MultiSeedContext const * pContext;
+    std::vector<WordData> Result;
+  };
+
+  static void RunMultiSeedTask(void * pUserData) noexcept
+  {
+    MultiSeedTask * pTask = static_cast<MultiSeedTask *>(pUserData);
+    pTask->Result = FindWords(*pTask->pGrid, pTask->Seed.X, pTask->Seed.Y, pTask->pDictionary);
+  }
+
+  // Runs on the main thread via IWorkerPool::DoPostWork, so pResults/pWordEntries need no locking.
+  static void MergeMultiSeedTask(void * pUserData) noexcept
+  {
+    MultiSeedTask * pTask = static_cast<MultiSeedTask *>(pUserData);
+    MultiSeedContext const * pContext = pTask->pContext;
+
+    for (WordData & wordData : pTask->Result)
+    {
+      auto it = pContext->pWordEntries->find(wordData.Word);
+      if (it == pContext->pWordEntries->end())
+      {
+        int index = (int)pContext->pResults->size();
+        pContext->pWordEntries->emplace(wordData.Word, index);
+        pContext->pResults->push_back(std::move(wordData));
+        continue;
+      }
+
+      WordData & existing = (*pContext->pResults)[it->second];
+      for (auto const & location : wordData.Locations)
+        existing.Locations.push_back(location);
+    }
+  }
+
+  static void FreeMultiSeedTask(void * pUserData) noexcept
+  {
+    delete static_cast<MultiSeedTask *>(pUserData);
+  }
+
+  static std::vector<WordData> ReducePallindromes(std::vector<WordData> results)
+  {
+    // For each word, find any location sequences which are the same forward as backward and elimate one
+  }
+
+  static std::vector<WordData> Clean(std::vector<WordData> results)
+  {
+    return ReducePallindromes(results);
+  }
+
+  std::vector<WordData> FindWords(Grid2D<char> const & grid,
+    int threadCount,
+    IDictionary const * pDictionary)
+  {
+    if (threadCount < 1)
+    {
+      threadCount = (int)std::thread::hardware_concurrency();
+      if (threadCount < 1)
+        threadCount = 1;
+    }
+
+    IWorkerPool * pWorkerPool = IWorkerPool::Create(threadCount);
+
+    std::vector<WordData> results;
+    std::unordered_map<std::string, int> wordEntries;
+
+    if (pWorkerPool == nullptr)
+      return results;
+
+    MultiSeedContext context{ &results, &wordEntries };
+
+    for (int y = 0; y < grid.Height(); y++)
+    {
+      for (int x = 0; x < grid.Width(); x++)
+      {
+        MultiSeedTask * pTask = new MultiSeedTask{ &grid, Coord{ x, y }, pDictionary, &context, {} };
+
+        if (pWorkerPool->AddTask(RunMultiSeedTask, pTask, FreeMultiSeedTask, MergeMultiSeedTask) != ErrorCode::None)
+          delete pTask;
+      }
+    }
+
+    for (;;)
+    {
+      uint32_t processed = pWorkerPool->DoPostWork();
+      if (processed == 0 && !pWorkerPool->HasActiveWorkers())
+        break;
+    }
+
+    delete pWorkerPool;
+
+    return Clean(results);
   }
 }

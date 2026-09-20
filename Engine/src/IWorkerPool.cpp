@@ -7,7 +7,7 @@
 #include <vector>
 #include <queue>
 
-#include "WorkerPool.h"
+#include "IWorkerPool.h"
 
 namespace Engine
 {

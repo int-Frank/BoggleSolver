@@ -13,6 +13,11 @@ namespace Engine
                                   int seedX,
                                   int seedY,
                                   IDictionary const * pDictionary);
+
+  
+  std::vector<WordData> FindWords(Grid2D<char> const & grid,
+                                  int threadCount,
+                                  IDictionary const * pDictionary);
 }
 
 #endif

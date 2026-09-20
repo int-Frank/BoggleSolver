@@ -1,5 +1,5 @@
-#ifndef WORKERPOOL_H
-#define WORKERPOOL_H
+#ifndef IWORKERPOOL_H
+#define IWORKERPOOL_H
 
 #include <cstdint>
 
