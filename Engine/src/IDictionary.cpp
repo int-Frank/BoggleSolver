@@ -24,8 +24,8 @@ namespace Engine
   {
     struct Word
     {
-      size_t index;
-      size_t length;
+      uint32_t index;
+      uint32_t length;
     };
 
     std::unordered_map<uint32_t, Context> m_oneLetterWords;
@@ -33,9 +33,14 @@ namespace Engine
     std::unordered_map<uint32_t, Context> m_threeLetterWords;
 
     std::vector<Word> m_wordEntryPoints;
-    std::vector<size_t> m_wordCharacters;
+    std::vector<char> m_wordCharacters;
 
   public:
+
+    bool IsWord(std::string_view word, Context const * entry)
+    {
+      
+    }
 
     size_t WordCount(char c) const override
     {
