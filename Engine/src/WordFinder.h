@@ -9,15 +9,25 @@
 
 namespace Engine
 {
-  std::vector<WordData> FindWords(Grid2D<char> const & grid,
-                                  int seedX,
-                                  int seedY,
+  class IWorkerPool;
+
+  class IFindWordsTask
+  {
+  public:
+
+    static IFindWordsTask * Begin(Grid2D<char> const * pGrid,
+                                  IWorkerPool * pWorkerPool,
                                   IDictionary const * pDictionary);
 
-  
-  std::vector<WordData> FindWords(Grid2D<char> const & grid,
-                                  int threadCount,
-                                  IDictionary const * pDictionary);
+    // Do not delete (or let go out of scope) an IFindWordsTask until IsDone()
+    // returns true.
+    virtual ~IFindWordsTask() = default;
+
+    virtual bool IsDone() const = 0;
+
+    // Valid only once IsDone() is true.
+    virtual std::vector<WordData> TakeResult() = 0;
+  };
 }
 
 #endif

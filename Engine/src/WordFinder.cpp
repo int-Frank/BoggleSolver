@@ -1,7 +1,7 @@
 
 #include <array>
+#include <atomic>
 #include <unordered_map>
-#include <thread>
 
 #include "WordFinder.h"
 #include "Coord.h"
@@ -9,58 +9,193 @@
 
 namespace Engine
 {
-  struct WordFinderContext
+  class FindWordsTask : public IFindWordsTask
   {
-    Grid2D<char> const * pCharacterGrid;
-    Grid2D<bool> Visited;
-    int CurrentLength;
-    std::vector<char> CharacterBlock;
-    std::vector<Coord> PathBlock;
-    IDictionary::Context const * pDictionaryContext;
-    IDictionary const * pDictionary;
-    std::vector<WordData> CapturedWords;
-    std::unordered_map<std::string, int> CapturedWordsMap;
+  public:
+    FindWordsTask(Grid2D<char> const * pGrid, IWorkerPool * pWorkerPool, IDictionary const * pDictionary);
 
-    WordFinderContext(Grid2D<char> const & characterGrid, IDictionary const * pDictionary)
-      : pCharacterGrid(&characterGrid)
-      , Visited(characterGrid.Width(), characterGrid.Height(), false)
-      , CurrentLength(0)
-      , CharacterBlock(characterGrid.Width() * characterGrid.Height())
-      , PathBlock(characterGrid.Width() * characterGrid.Height())
-      , pDictionaryContext(nullptr)
-      , pDictionary(pDictionary)
+    bool IsDone() const override;
+    std::vector<WordData> TakeResult() override;
+
+  private:
+    struct SeedContext
     {
-    }
+      Grid2D<char> const * pCharacterGrid;
+      Grid2D<bool> Visited;
+      int CurrentLength;
+      std::vector<char> CharacterBlock;
+      std::vector<Coord> PathBlock;
+      IDictionary::Context const * pDictionaryContext;
+      IDictionary const * pDictionary;
+      std::vector<WordData> CapturedWords;
+      std::unordered_map<std::string, int> CapturedWordsMap;
+
+      SeedContext(Grid2D<char> const * pCharacterGrid, IDictionary const * pDictionary)
+        : pCharacterGrid(pCharacterGrid)
+        , Visited(pCharacterGrid->Width(), pCharacterGrid->Height(), false)
+        , CurrentLength(0)
+        , CharacterBlock(pCharacterGrid->Width() * pCharacterGrid->Height())
+        , PathBlock(pCharacterGrid->Width() * pCharacterGrid->Height())
+        , pDictionaryContext(nullptr)
+        , pDictionary(pDictionary)
+      {
+      }
+    };
+
+    struct SeedTask
+    {
+      Grid2D<char> const * pGrid;
+      Coord Seed;
+      IDictionary const * pDictionary;
+      FindWordsTask * pOwner;
+      std::vector<WordData> Result;
+    };
+
+    static std::vector<WordData> FindWordsForSeed(Grid2D<char> const * pGrid,
+                                                    int seedX,
+                                                    int seedY,
+                                                    IDictionary const * pDictionary);
+    static void ProcessSeed(Coord coord, SeedContext * pContext);
+    static std::array<Coord, 8> GetSurroundingCoords(Coord coord);
+    static std::string_view GetWord(SeedContext const * pContext);
+    static void CaptureCurrentWord(SeedContext * pContext);
+
+    static void RunSeedTask(void * pUserData) noexcept;
+    static void MergeSeedTask(void * pUserData) noexcept;
+    static void FreeSeedTask(void * pUserData) noexcept;
+
+    static bool IsReversePath(std::vector<Coord> const & a, std::vector<Coord> const & b);
+    static std::vector<WordData> RemovePalindromes(std::vector<WordData> results);
+
+    void MergeResult(std::vector<WordData> & seedResult);
+    void OnSeedComplete();
+
+    std::atomic<int> m_pending{ 0 };
+    std::atomic<bool> m_done{ false };
+    std::vector<WordData> m_results;
+    std::unordered_map<std::string, int> m_wordEntries;
   };
 
-  static void Process(Coord coord, WordFinderContext * pContext);
-  static std::array<Coord, 8> GetSurroundingCoords(Coord coord);
-  static std::string_view GetWord(WordFinderContext const * pContext);
-  static void CaptureCurrentWord(WordFinderContext * pContext);
-
-  std::vector<WordData> FindWords(Grid2D<char> const & characterGrid,
-                                  int seedX,
-                                  int seedY,
-                                  IDictionary const * pDictionary)
+  IFindWordsTask * IFindWordsTask::Begin(Grid2D<char> const * pGrid,
+                                          IWorkerPool * pWorkerPool,
+                                          IDictionary const * pDictionary)
   {
-    if (seedX < 0 || seedX >= characterGrid.Width() || seedY < 0 || seedY >= characterGrid.Height())
+    return new FindWordsTask(pGrid, pWorkerPool, pDictionary);
+  }
+
+  FindWordsTask::FindWordsTask(Grid2D<char> const * pGrid, IWorkerPool * pWorkerPool, IDictionary const * pDictionary)
+  {
+    int totalSeeds = pGrid->Width() * pGrid->Height();
+    m_pending.store(totalSeeds, std::memory_order_relaxed);
+
+    if (pWorkerPool == nullptr || totalSeeds == 0)
+    {
+      m_pending.store(0, std::memory_order_relaxed);
+      m_done.store(true, std::memory_order_release);
+      return;
+    }
+
+    for (int y = 0; y < pGrid->Height(); y++)
+    {
+      for (int x = 0; x < pGrid->Width(); x++)
+      {
+        SeedTask * pTask = new SeedTask{ pGrid, Coord{ x, y }, pDictionary, this, {} };
+
+        if (pWorkerPool->AddTask(RunSeedTask, pTask, FreeSeedTask, MergeSeedTask) != ErrorCode::None)
+        {
+          delete pTask;
+          // This seed will never run/merge, so account for it here or
+          // m_pending would never reach zero and the task would hang forever.
+          OnSeedComplete();
+        }
+      }
+    }
+  }
+
+  bool FindWordsTask::IsDone() const
+  {
+    return m_done.load(std::memory_order_acquire);
+  }
+
+  std::vector<WordData> FindWordsTask::TakeResult()
+  {
+    return std::move(m_results);
+  }
+
+  void FindWordsTask::OnSeedComplete()
+  {
+    if (m_pending.fetch_sub(1, std::memory_order_acq_rel) == 1)
+    {
+      m_results = RemovePalindromes(std::move(m_results));
+      m_done.store(true, std::memory_order_release);
+    }
+  }
+
+  void FindWordsTask::MergeResult(std::vector<WordData> & seedResult)
+  {
+    for (WordData & wordData : seedResult)
+    {
+      auto it = m_wordEntries.find(wordData.Word);
+      if (it == m_wordEntries.end())
+      {
+        int index = (int)m_results.size();
+        m_wordEntries.emplace(wordData.Word, index);
+        m_results.push_back(std::move(wordData));
+        continue;
+      }
+
+      WordData & existing = m_results[it->second];
+      for (auto const & location : wordData.Locations)
+        existing.Locations.push_back(location);
+    }
+  }
+
+  void FindWordsTask::RunSeedTask(void * pUserData) noexcept
+  {
+    SeedTask * pTask = static_cast<SeedTask *>(pUserData);
+    pTask->Result = FindWordsForSeed(pTask->pGrid, pTask->Seed.X, pTask->Seed.Y, pTask->pDictionary);
+  }
+
+  // Runs on whichever single thread drives the shared IWorkerPool's DoPostWork(),
+  // so m_results/m_wordEntries need no locking - as long as only that one thread
+  // ever calls DoPostWork() on the pool, merges for this task never overlap.
+  void FindWordsTask::MergeSeedTask(void * pUserData) noexcept
+  {
+    SeedTask * pTask = static_cast<SeedTask *>(pUserData);
+    FindWordsTask * pOwner = pTask->pOwner;
+
+    pOwner->MergeResult(pTask->Result);
+    pOwner->OnSeedComplete();
+  }
+
+  void FindWordsTask::FreeSeedTask(void * pUserData) noexcept
+  {
+    delete static_cast<SeedTask *>(pUserData);
+  }
+
+  std::vector<WordData> FindWordsTask::FindWordsForSeed(Grid2D<char> const * pCharacterGrid,
+                                                          int seedX,
+                                                          int seedY,
+                                                          IDictionary const * pDictionary)
+  {
+    if (seedX < 0 || seedX >= pCharacterGrid->Width() || seedY < 0 || seedY >= pCharacterGrid->Height())
     {
       return std::vector<WordData>();
     }
 
-    WordFinderContext context(characterGrid, pDictionary);
+    SeedContext context(pCharacterGrid, pDictionary);
 
     Coord seed
     {
       seedX, seedY
     };
 
-    Process(seed, &context);
+    ProcessSeed(seed, &context);
 
     return context.CapturedWords;
   }
 
-  static void Process(Coord coord, WordFinderContext *pContext)
+  void FindWordsTask::ProcessSeed(Coord coord, SeedContext * pContext)
   {
     if (coord.X < 0 || coord.X >= pContext->pCharacterGrid->Width() ||
       coord.Y < 0 || coord.Y >= pContext->pCharacterGrid->Height() ||
@@ -115,13 +250,13 @@ namespace Engine
     auto surroundingCoords = GetSurroundingCoords(coord);
     for (auto nextCoord : surroundingCoords)
     {
-      Process(nextCoord, pContext);
+      ProcessSeed(nextCoord, pContext);
     }
     pContext->CurrentLength--;
     pContext->Visited.Set(coord, false);
   }
 
-  static std::array<Coord, 8> GetSurroundingCoords(Coord coord)
+  std::array<Coord, 8> FindWordsTask::GetSurroundingCoords(Coord coord)
   {
     return
     {
@@ -136,12 +271,12 @@ namespace Engine
     };
   }
 
-  static std::string_view GetWord(WordFinderContext const *pContext)
+  std::string_view FindWordsTask::GetWord(SeedContext const * pContext)
   {
     return std::string_view(pContext->CharacterBlock.data(), pContext->CurrentLength);
   }
 
-  static void CaptureCurrentWord(WordFinderContext * pContext)
+  void FindWordsTask::CaptureCurrentWord(SeedContext * pContext)
   {
     std::string word(GetWord(pContext));
     std::vector<Coord> path(pContext->PathBlock.begin(), pContext->PathBlock.begin() + pContext->CurrentLength);
@@ -162,56 +297,7 @@ namespace Engine
     pContext->CapturedWords[it->second].Locations.push_back(std::move(path));
   }
 
-  struct MultiSeedContext
-  {
-    std::vector<WordData> * pResults;
-    std::unordered_map<std::string, int> * pWordEntries;
-  };
-
-  struct MultiSeedTask
-  {
-    Grid2D<char> const * pGrid;
-    Coord Seed;
-    IDictionary const * pDictionary;
-    MultiSeedContext const * pContext;
-    std::vector<WordData> Result;
-  };
-
-  static void RunMultiSeedTask(void * pUserData) noexcept
-  {
-    MultiSeedTask * pTask = static_cast<MultiSeedTask *>(pUserData);
-    pTask->Result = FindWords(*pTask->pGrid, pTask->Seed.X, pTask->Seed.Y, pTask->pDictionary);
-  }
-
-  // Runs on the main thread via IWorkerPool::DoPostWork, so pResults/pWordEntries need no locking.
-  static void MergeMultiSeedTask(void * pUserData) noexcept
-  {
-    MultiSeedTask * pTask = static_cast<MultiSeedTask *>(pUserData);
-    MultiSeedContext const * pContext = pTask->pContext;
-
-    for (WordData & wordData : pTask->Result)
-    {
-      auto it = pContext->pWordEntries->find(wordData.Word);
-      if (it == pContext->pWordEntries->end())
-      {
-        int index = (int)pContext->pResults->size();
-        pContext->pWordEntries->emplace(wordData.Word, index);
-        pContext->pResults->push_back(std::move(wordData));
-        continue;
-      }
-
-      WordData & existing = (*pContext->pResults)[it->second];
-      for (auto const & location : wordData.Locations)
-        existing.Locations.push_back(location);
-    }
-  }
-
-  static void FreeMultiSeedTask(void * pUserData) noexcept
-  {
-    delete static_cast<MultiSeedTask *>(pUserData);
-  }
-
-  static bool IsReversePath(std::vector<Coord> const & a, std::vector<Coord> const & b)
+  bool FindWordsTask::IsReversePath(std::vector<Coord> const & a, std::vector<Coord> const & b)
   {
     if (a.size() != b.size())
       return false;
@@ -227,9 +313,9 @@ namespace Engine
     return true;
   }
 
-  static std::vector<WordData> RemovePallindromes(std::vector<WordData> results)
+  std::vector<WordData> FindWordsTask::RemovePalindromes(std::vector<WordData> results)
   {
-    // For each word, find any location sequences which are the same forward as backward and elimate one
+    // For each word, find any location sequences which are the same forward as backward and eliminate one
     for (WordData & wordData : results)
     {
       std::vector<std::vector<Coord>> keptLocations;
@@ -255,58 +341,5 @@ namespace Engine
     }
 
     return results;
-  }
-
-  static std::vector<WordData> Clean(std::vector<WordData> results)
-  {
-    return RemovePallindromes(results);
-  }
-
-  std::vector<WordData> FindWords(Grid2D<char> const & grid,
-    int threadCount,
-    IDictionary const * pDictionary)
-  {
-    if (threadCount < 1)
-    {
-      threadCount = (int)std::thread::hardware_concurrency() - 1;
-      if (threadCount < 1)
-        threadCount = 1;
-    }
-
-    IWorkerPool * pWorkerPool = IWorkerPool::Create(threadCount);
-
-    std::vector<WordData> results;
-    std::unordered_map<std::string, int> wordEntries;
-
-    if (pWorkerPool == nullptr)
-      return results;
-
-    MultiSeedContext context{ &results, &wordEntries };
-
-    for (int y = 0; y < grid.Height(); y++)
-    {
-      for (int x = 0; x < grid.Width(); x++)
-      {
-        MultiSeedTask * pTask = new MultiSeedTask{ &grid, Coord{ x, y }, pDictionary, &context, {} };
-
-        if (pWorkerPool->AddTask(RunMultiSeedTask, pTask, FreeMultiSeedTask, MergeMultiSeedTask) != ErrorCode::None)
-          delete pTask;
-      }
-    }
-
-    for (;;)
-    {
-      uint32_t processed = pWorkerPool->DoPostWork();
-      if (processed == 0)
-      {
-        if (!pWorkerPool->HasActiveWorkers())
-          break;
-        std::this_thread::yield();
-      }
-    }
-
-    delete pWorkerPool;
-
-    return Clean(results);
   }
 }
