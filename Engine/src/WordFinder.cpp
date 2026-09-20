@@ -268,7 +268,7 @@ namespace Engine
   {
     if (threadCount < 1)
     {
-      threadCount = (int)std::thread::hardware_concurrency();
+      threadCount = (int)std::thread::hardware_concurrency() - 1;
       if (threadCount < 1)
         threadCount = 1;
     }
@@ -297,8 +297,12 @@ namespace Engine
     for (;;)
     {
       uint32_t processed = pWorkerPool->DoPostWork();
-      if (processed == 0 && !pWorkerPool->HasActiveWorkers())
-        break;
+      if (processed == 0)
+      {
+        if (!pWorkerPool->HasActiveWorkers())
+          break;
+        std::this_thread::yield();
+      }
     }
 
     delete pWorkerPool;
