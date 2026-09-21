@@ -9,7 +9,7 @@ namespace Engine
   Grid2D<char> GenerateModernBoggleGrid(unsigned int * pSeed);
   Grid2D<char> GenerateBigBoggle(unsigned int * pSeed);
   Grid2D<char> GenerateSuperBoggle(unsigned int * pSeed);
-  //Grid2D<char> GenerateCustomBoggle(unsigned int width, unsigned int height, unsigned int * pSeed);
+  Grid2D<char> GenerateCustomBoggle(unsigned int width, unsigned int height, unsigned int * pSeed);
 }
 
 #endif

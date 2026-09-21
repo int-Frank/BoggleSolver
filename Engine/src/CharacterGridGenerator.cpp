@@ -1,6 +1,7 @@
 
 #include <array>
 #include <random>
+#include <algorithm>
 
 #include "CharacterGridGenerator.h"
 
@@ -121,7 +122,7 @@ namespace Engine
     Dice{{'d', 'e', 'i', 'l', 'n', 's'}}
   };
 
-  char RollDice(Dice dice, std::mt19937 & rng)
+  static char RollDice(Dice dice, std::mt19937 & rng)
   {
     std::uniform_int_distribution<size_t> faceDist(0, dice.Faces.size() - 1);
     return dice.Faces[faceDist(rng)];
@@ -215,8 +216,50 @@ namespace Engine
     return grid;
   }
 
-  //Grid2D<char> GenerateCustomBoggle(unsigned int width, unsigned int height, unsigned int * pSeed)
-  //{
-  //
-  //}
+  static std::array<int, 26> BuildLetterWeights()
+  {
+    std::array<int, 26> weights{};
+
+    auto tally = [&weights](const auto & diceSet)
+      {
+        for (const auto & die : diceSet)
+          for (char c : die.Faces)
+            weights[c - 'a']++;
+      };
+
+    tally(ClassicDice);
+    tally(ModernDice);
+    tally(BigDice);
+    tally(SuperDice);
+
+    return weights;
+  }
+
+  static char RandomWeightedLetter(std::mt19937 & rng)
+  {
+    static const std::array<int, 26> weights = BuildLetterWeights();
+    static std::discrete_distribution<int> dist(weights.begin(), weights.end());
+    return 'a' + dist(rng);
+  }
+
+  Grid2D<char> GenerateCustomBoggle(unsigned int width, unsigned int height, unsigned int * pSeed)
+  {
+    width = width == 0 ? 1 : width;
+    height = height == 0 ? 1 : height;
+
+    std::mt19937 rng = pSeed == nullptr ? std::mt19937(std::random_device{}()) : std::mt19937(*pSeed);
+
+    Grid2D<char> grid(width, height, 'a');
+
+    for (unsigned int x = 0; x < width; x++)
+    {
+      for (unsigned int y = 0; y < height; y++)
+      {
+        char c = RandomWeightedLetter(rng);
+        grid.Set(Coord(x, y), c);
+      }
+    }
+
+    return grid;
+  }
 }
