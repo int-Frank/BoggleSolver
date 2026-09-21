@@ -128,19 +128,20 @@ namespace Engine
     return dice.Faces[faceDist(rng)];
   }
 
-  Grid2D<char> GenerateClassicBoggleGrid(unsigned int * pSeed)
+  template<size_t N>
+  static Grid2D<char> GenerateGridFromDice(const std::array<Dice, N> & dice, int width, int height, unsigned int * pSeed)
   {
     std::mt19937 rng = pSeed == nullptr ? std::mt19937(std::random_device{}()) : std::mt19937(*pSeed);
 
-    std::array<Dice, 16> shuffled = ClassicDice;
+    std::array<Dice, N> shuffled = dice;
     std::shuffle(shuffled.begin(), shuffled.end(), rng);
 
-    Grid2D<char> grid(4, 4, 'a');
+    Grid2D<char> grid(width, height, 'a');
 
-    for (int i = 0; i < 16; i++)
+    for (size_t i = 0; i < N; i++)
     {
-      int x = i % 4;
-      int y = i / 4;
+      int x = (int)(i % width);
+      int y = (int)(i / width);
 
       char c = RollDice(shuffled[i], rng);
 
@@ -148,72 +149,26 @@ namespace Engine
     }
 
     return grid;
+  }
+
+  Grid2D<char> GenerateClassicBoggleGrid(unsigned int * pSeed)
+  {
+    return GenerateGridFromDice(ClassicDice, 4, 4, pSeed);
   }
 
   Grid2D<char> GenerateModernBoggleGrid(unsigned int * pSeed)
   {
-    std::mt19937 rng = pSeed == nullptr ? std::mt19937(std::random_device{}()) : std::mt19937(*pSeed);
-
-    std::array<Dice, 16> shuffled = ModernDice;
-    std::shuffle(shuffled.begin(), shuffled.end(), rng);
-
-    Grid2D<char> grid(4, 4, 'a');
-
-    for (int i = 0; i < 16; i++)
-    {
-      int x = i % 4;
-      int y = i / 4;
-
-      char c = RollDice(shuffled[i], rng);
-
-      grid.Set(Coord(x, y), c);
-    }
-
-    return grid;
+    return GenerateGridFromDice(ModernDice, 4, 4, pSeed);
   }
 
   Grid2D<char> GenerateBigBoggle(unsigned int * pSeed)
   {
-    std::mt19937 rng = pSeed == nullptr ? std::mt19937(std::random_device{}()) : std::mt19937(*pSeed);
-
-    std::array<Dice, 25> shuffled = BigDice;
-    std::shuffle(shuffled.begin(), shuffled.end(), rng);
-
-    Grid2D<char> grid(5, 5, 'a');
-
-    for (int i = 0; i < 25; i++)
-    {
-      int x = i % 5;
-      int y = i / 5;
-
-      char c = RollDice(shuffled[i], rng);
-
-      grid.Set(Coord(x, y), c);
-    }
-
-    return grid;
+    return GenerateGridFromDice(BigDice, 5, 5, pSeed);
   }
 
   Grid2D<char> GenerateSuperBoggle(unsigned int * pSeed)
   {
-    std::mt19937 rng = pSeed == nullptr ? std::mt19937(std::random_device{}()) : std::mt19937(*pSeed);
-
-    std::array<Dice, 36> shuffled = SuperDice;
-    std::shuffle(shuffled.begin(), shuffled.end(), rng);
-
-    Grid2D<char> grid(6, 6, 'a');
-
-    for (int i = 0; i < 36; i++)
-    {
-      int x = i % 6;
-      int y = i / 6;
-
-      char c = RollDice(shuffled[i], rng);
-
-      grid.Set(Coord(x, y), c);
-    }
-
-    return grid;
+    return GenerateGridFromDice(SuperDice, 6, 6, pSeed);
   }
 
   static std::array<int, 26> BuildLetterWeights()
@@ -239,7 +194,7 @@ namespace Engine
   {
     static const std::array<int, 26> weights = BuildLetterWeights();
     static std::discrete_distribution<int> dist(weights.begin(), weights.end());
-    return 'a' + dist(rng);
+    return static_cast<char>('a' + dist(rng));
   }
 
   Grid2D<char> GenerateCustomBoggle(unsigned int width, unsigned int height, unsigned int * pSeed)
