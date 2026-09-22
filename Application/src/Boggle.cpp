@@ -32,7 +32,7 @@ namespace
   void SelectWord(App::AppData * pData, Engine::WordData const & word)
   {
     pData->UI.SelectedWord = word.Word;
-    pData->UI.SelectedPath = word.Locations.empty() ? std::vector<Engine::Coord>() : word.Locations[0];
+    pData->UI.SelectedPaths = word.Locations;
     pData->UI.SelectionStartTime = std::chrono::steady_clock::now();
     pData->UI.PendingScrollToSelection = true;
   }
@@ -304,9 +304,10 @@ namespace
 
     // Scroll the selected word's starting tile into view, once, right after it's selected -
     // matters once the board is bigger than the panel and the selection can start offscreen.
-    if (pData->UI.PendingScrollToSelection && !pData->UI.SelectedPath.empty())
+    // When a word has multiple locations, focus on the first one.
+    if (pData->UI.PendingScrollToSelection && !pData->UI.SelectedPaths.empty() && !pData->UI.SelectedPaths[0].empty())
     {
-      Engine::Coord target = pData->UI.SelectedPath[0];
+      Engine::Coord target = pData->UI.SelectedPaths[0][0];
       ImVec2 targetScreenPos = origin + ImVec2(TrayPadding + target.X * (TileSize + TileGap) + TileSize * 0.5f,
                                                 TrayPadding + target.Y * (TileSize + TileGap) + TileSize * 0.5f);
 
@@ -337,7 +338,7 @@ namespace
       }
     }
 
-    if (pData->UI.SelectedPath.size() >= 2)
+    if (!pData->UI.SelectedPaths.empty())
     {
       constexpr float PixelsPerSecond = 700.0f;
       constexpr float LineThickness = 5.0f;
@@ -349,7 +350,6 @@ namespace
       };
 
       double elapsedSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - pData->UI.SelectionStartTime).count();
-      float remainingLength = static_cast<float>(elapsedSeconds) * PixelsPerSecond;
 
       // Cap each segment with filled circles at both ends - gives it a rounded-cap look,
       // and smooths the joints where consecutive segments meet.
@@ -361,26 +361,35 @@ namespace
         pDrawList->AddCircleFilled(b, radius, pathColor);
       };
 
-      ImVec2 previousPoint = TileCenter(pData->UI.SelectedPath[0]);
-      for (size_t i = 1; i < pData->UI.SelectedPath.size() && remainingLength > 0.0f; i++)
+      // All of the word's locations animate in together, at the same pace.
+      for (auto const & path : pData->UI.SelectedPaths)
       {
-        ImVec2 nextPoint = TileCenter(pData->UI.SelectedPath[i]);
-        ImVec2 segment = nextPoint - previousPoint;
-        float segmentLength = std::sqrt(segment.x * segment.x + segment.y * segment.y);
+        if (path.size() < 2)
+          continue;
 
-        if (remainingLength >= segmentLength)
-        {
-          DrawSegment(previousPoint, nextPoint);
-          remainingLength -= segmentLength;
-        }
-        else
-        {
-          float t = segmentLength > 0.0f ? remainingLength / segmentLength : 0.0f;
-          DrawSegment(previousPoint, previousPoint + segment * t);
-          remainingLength = 0.0f;
-        }
+        float remainingLength = static_cast<float>(elapsedSeconds) * PixelsPerSecond;
 
-        previousPoint = nextPoint;
+        ImVec2 previousPoint = TileCenter(path[0]);
+        for (size_t i = 1; i < path.size() && remainingLength > 0.0f; i++)
+        {
+          ImVec2 nextPoint = TileCenter(path[i]);
+          ImVec2 segment = nextPoint - previousPoint;
+          float segmentLength = std::sqrt(segment.x * segment.x + segment.y * segment.y);
+
+          if (remainingLength >= segmentLength)
+          {
+            DrawSegment(previousPoint, nextPoint);
+            remainingLength -= segmentLength;
+          }
+          else
+          {
+            float t = segmentLength > 0.0f ? remainingLength / segmentLength : 0.0f;
+            DrawSegment(previousPoint, previousPoint + segment * t);
+            remainingLength = 0.0f;
+          }
+
+          previousPoint = nextPoint;
+        }
       }
     }
 

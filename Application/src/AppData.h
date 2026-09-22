@@ -35,7 +35,7 @@ namespace App
   struct UIData
   {
     std::string SelectedWord;
-    std::vector<Engine::Coord> SelectedPath;
+    std::vector<std::vector<Engine::Coord>> SelectedPaths;
     std::chrono::steady_clock::time_point SelectionStartTime;
 
     // Consumed (and cleared) by the board view the first time it draws after a
