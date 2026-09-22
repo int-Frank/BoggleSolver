@@ -152,6 +152,13 @@ namespace Engine
     // Hard-coded rules for validating words
     static bool IsValid(std::string_view word)
     {
+      // Standard Boggle rule: words must be at least 3 letters long. This has to be
+      // checked against the word's original length, before 'qu' is collapsed to a
+      // single stored 'q' below - otherwise a 3-letter word like "que" (2 stored chars)
+      // would be wrongly culled.
+      if (word.size() < 3)
+        return false;
+
       // A Boggle Qu die always contributes "qu", never a bare 'q' - so a word can only
       // be spelled if every 'q' in it is immediately followed by a 'u'.
       for (size_t i = 0; i < word.size(); i++)
