@@ -32,7 +32,8 @@ workspace "BoggleSolver"
 
   project "Application"
     location "Application"
-    kind "ConsoleApp"
+    kind "WindowedApp"
+    entrypoint "mainCRTStartup"
     targetdir ("%{wks.location}/build/%{prj.name}-%{cfg.buildcfg}")
     objdir ("%{wks.location}/build/intermediate/%{prj.name}-%{cfg.buildcfg}")
     systemversion "latest"
