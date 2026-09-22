@@ -27,6 +27,7 @@ namespace
     pData->UI.SelectedWord = word.Word;
     pData->UI.SelectedPath = word.Locations.empty() ? std::vector<Engine::Coord>() : word.Locations[0];
     pData->UI.SelectionStartTime = std::chrono::steady_clock::now();
+    pData->UI.PendingScrollToSelection = true;
   }
 
   // width/height are only used for BoardType::Custom - the other types have a fixed size.
@@ -138,7 +139,10 @@ namespace
 
     ImGui::Separator();
 
-    ImGui::Text("Current board: %s", BoardTypeName(pData->CurrentBoardType));
+    if (pData->CurrentBoardType == App::BoardType::Custom)
+      ImGui::Text("Current board: Custom (%dx%d)", pData->BoggleLayout.Width(), pData->BoggleLayout.Height());
+    else
+      ImGui::Text("Current board: %s", BoardTypeName(pData->CurrentBoardType));
 
     if (ImGui::Button("Shake!"))
     {
@@ -238,6 +242,21 @@ namespace
 
     ImVec2 origin = ImGui::GetCursorScreenPos();
     ImDrawList * pDrawList = ImGui::GetWindowDrawList();
+
+    // Scroll the selected word's starting tile into view, once, right after it's selected -
+    // matters once the board is bigger than the panel and the selection can start offscreen.
+    if (pData->UI.PendingScrollToSelection && !pData->UI.SelectedPath.empty())
+    {
+      Engine::Coord target = pData->UI.SelectedPath[0];
+      ImVec2 targetScreenPos = origin + ImVec2(TrayPadding + target.X * (TileSize + TileGap) + TileSize * 0.5f,
+                                                TrayPadding + target.Y * (TileSize + TileGap) + TileSize * 0.5f);
+
+      ImGuiWindow * pRightPanelWindow = ImGui::GetCurrentWindow();
+      ImGui::SetScrollFromPosX(pRightPanelWindow, targetScreenPos.x - pRightPanelWindow->Pos.x, 0.5f);
+      ImGui::SetScrollFromPosY(pRightPanelWindow, targetScreenPos.y - pRightPanelWindow->Pos.y, 0.5f);
+
+      pData->UI.PendingScrollToSelection = false;
+    }
 
     pDrawList->AddRectFilled(origin, origin + traySize, trayBgColor, TrayRounding);
     pDrawList->AddRect(origin, origin + traySize, trayBorderColor, TrayRounding, 2.0f);

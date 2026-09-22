@@ -35,6 +35,11 @@ namespace App
     std::string SelectedWord;
     std::vector<Engine::Coord> SelectedPath;
     std::chrono::steady_clock::time_point SelectionStartTime;
+
+    // Consumed (and cleared) by the board view the first time it draws after a
+    // selection is made, so it scrolls the selection into view exactly once and
+    // doesn't fight any scrolling the user does afterward.
+    bool PendingScrollToSelection;
   };
 
   struct AppData
