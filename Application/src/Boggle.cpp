@@ -11,7 +11,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cfloat>
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <set>
 #include <string>
@@ -20,6 +22,13 @@
 
 namespace
 {
+  void SelectWord(App::AppData * pData, Engine::WordData const & word)
+  {
+    pData->UI.SelectedWord = word.Word;
+    pData->UI.SelectedPath = word.Locations.empty() ? std::vector<Engine::Coord>() : word.Locations[0];
+    pData->UI.SelectionStartTime = std::chrono::steady_clock::now();
+  }
+
   // Standard ImGui splitter idiom (see the ImGui wiki's "Widgets" page): draws and drives a
   // draggable divider between two regions whose combined size is assumed to stay constant.
   bool Splitter(bool splitVertically, float thickness, float * pSize1, float * pSize2, float minSize1, float minSize2)
@@ -157,7 +166,11 @@ namespace
     }
 
     for (Engine::WordData const * pWord : sortedWords)
-      ImGui::TextUnformatted(pWord->Word.c_str());
+    {
+      bool isSelected = (pWord->Word == pData->UI.SelectedWord);
+      if (ImGui::Selectable(pWord->Word.c_str(), isSelected))
+        SelectWord(pData, *pWord);
+    }
 
     ImGui::EndChild();
 
@@ -172,11 +185,12 @@ namespace
     constexpr float TileRounding = 8.0f;
     constexpr float TrayRounding = 20.0f;
 
-    const ImU32 trayBgColor = IM_COL32(235, 235, 235, 255);
-    const ImU32 trayBorderColor = IM_COL32(90, 90, 90, 255);
+    const ImU32 trayBgColor = IM_COL32(74, 98, 122, 255);
+    const ImU32 trayBorderColor = IM_COL32(45, 60, 78, 255);
     const ImU32 tileColor = IM_COL32(245, 222, 179, 255);
     const ImU32 tileBorderColor = IM_COL32(120, 120, 120, 255);
     const ImU32 textColor = IM_COL32(30, 30, 30, 255);
+    const ImU32 pathColor = IM_COL32(196, 40, 40, 255);
 
     int cols = pData->BoggleLayout.Width();
     int rows = pData->BoggleLayout.Height();
@@ -199,6 +213,11 @@ namespace
     pDrawList->AddRectFilled(origin, origin + traySize, trayBgColor, TrayRounding);
     pDrawList->AddRect(origin, origin + traySize, trayBorderColor, TrayRounding, 2.0f);
 
+    ImFont * pFont = ImGui::GetFont();
+    float letterFontSize = ImGui::GetFontSize() * 1.6f;
+
+    // Tiles first, then the path line, then the letters on top - so the line passes
+    // under the letters instead of over them.
     for (int y = 0; y < rows; y++)
     {
       for (int x = 0; x < cols; x++)
@@ -208,15 +227,60 @@ namespace
 
         pDrawList->AddRectFilled(tileMin, tileMax, tileColor, TileRounding);
         pDrawList->AddRect(tileMin, tileMax, tileBorderColor, TileRounding, 1.5f);
+      }
+    }
+
+    if (pData->UI.SelectedPath.size() >= 2)
+    {
+      constexpr float PixelsPerSecond = 420.0f;
+      constexpr float LineThickness = 5.0f;
+
+      auto TileCenter = [&](Engine::Coord coord) -> ImVec2
+      {
+        return origin + ImVec2(TrayPadding + coord.X * (TileSize + TileGap) + TileSize * 0.5f,
+                                TrayPadding + coord.Y * (TileSize + TileGap) + TileSize * 0.5f);
+      };
+
+      double elapsedSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - pData->UI.SelectionStartTime).count();
+      float remainingLength = static_cast<float>(elapsedSeconds) * PixelsPerSecond;
+
+      ImVec2 previousPoint = TileCenter(pData->UI.SelectedPath[0]);
+      for (size_t i = 1; i < pData->UI.SelectedPath.size() && remainingLength > 0.0f; i++)
+      {
+        ImVec2 nextPoint = TileCenter(pData->UI.SelectedPath[i]);
+        ImVec2 segment = nextPoint - previousPoint;
+        float segmentLength = std::sqrt(segment.x * segment.x + segment.y * segment.y);
+
+        if (remainingLength >= segmentLength)
+        {
+          pDrawList->AddLine(previousPoint, nextPoint, pathColor, LineThickness);
+          remainingLength -= segmentLength;
+        }
+        else
+        {
+          float t = segmentLength > 0.0f ? remainingLength / segmentLength : 0.0f;
+          pDrawList->AddLine(previousPoint, previousPoint + segment * t, pathColor, LineThickness);
+          remainingLength = 0.0f;
+        }
+
+        previousPoint = nextPoint;
+      }
+    }
+
+    for (int y = 0; y < rows; y++)
+    {
+      for (int x = 0; x < cols; x++)
+      {
+        ImVec2 tileMin = origin + ImVec2(TrayPadding + x * (TileSize + TileGap), TrayPadding + y * (TileSize + TileGap));
 
         char c = pData->BoggleLayout.Get(Engine::Coord(x, y));
         std::string label = (c == 'q')
           ? std::string("Qu")
           : std::string(1, static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
 
-        ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
+        ImVec2 textSize = pFont->CalcTextSizeA(letterFontSize, FLT_MAX, 0.0f, label.c_str());
         ImVec2 textPos = tileMin + (ImVec2(TileSize, TileSize) - textSize) * 0.5f;
-        pDrawList->AddText(textPos, textColor, label.c_str());
+        pDrawList->AddText(pFont, letterFontSize, textPos, textColor, label.c_str());
       }
     }
 
@@ -255,11 +319,12 @@ namespace App
       return false;
 
     *ppData = new AppData
-    { 
-      Engine::Grid2D<char>(1, 1, ' '), 
-      BoggleResult{}, 
+    {
+      Engine::Grid2D<char>(1, 1, ' '),
+      BoggleResult{},
       pWorkerPool,
-      GetDictionary() 
+      GetDictionary(),
+      UIData{}
     };
 
     Engine::Grid2D<char> board = Engine::GenerateModernBoggleGrid(nullptr);
@@ -308,6 +373,7 @@ namespace App
   void NewGameBoard(Engine::Grid2D<char> board, AppData * pData)
   {
     pData->BoggleLayout = board;
+    pData->UI = UIData{};
 
     Engine::IWordSearch * pSearch = Engine::IWordSearch::Begin(&pData->BoggleLayout, pData->pWorkerPool, pData->pDictionary);
 
