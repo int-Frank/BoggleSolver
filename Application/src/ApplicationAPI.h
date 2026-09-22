@@ -18,10 +18,7 @@ namespace App
   bool DestroyAppData(AppData ** ppData);
   bool InitAppData(AppData ** ppData);
 
-  // Sets the grid and starts the word search running in the background - does not block.
-  // Progress is polled once per frame from DoFrame; pData->pActiveSearch is non-null until
-  // it completes, at which point Result is populated with the timed outcome. Calling this
-  // again while a search is already running is a no-op (the UI shouldn't allow it anyway).
+  // Sets the grid, runs the word search to completion and records the timed result in pData.
   void NewGameBoard(Engine::Grid2D<char> board, AppData * pData);
 }
 

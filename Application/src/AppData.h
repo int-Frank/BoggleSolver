@@ -5,9 +5,9 @@
 #include "WordData.h"
 #include "IWorkerPool.h"
 #include "IDictionary.h"
-#include "IWordSearch.h"
 
 #include <chrono>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -44,19 +44,29 @@ namespace App
     bool PendingScrollToSelection;
   };
 
+  // Holds the board a "New board"/"Shake!" click wants to switch to until the "Working"
+  // popup it opened has been visible for long enough - see ProcessPendingBoardStart in
+  // Boggle.cpp.
+  struct PendingBoardStart
+  {
+    Engine::Grid2D<char> Board;
+    std::chrono::steady_clock::time_point QueuedTime;
+  };
+
   struct AppData
   {
+    // Boards with fewer dice than this solve fast enough that the "Working" popup dance
+    // (see ProcessPendingBoardStart in Boggle.cpp) is unnecessary overhead - NewGameBoard
+    // is just called directly instead.
+    static constexpr int DirectStartDiceThreshold = 10000;
+
     Engine::Grid2D<char> BoggleLayout;
     BoggleResult Result;
     Engine::IWorkerPool * pWorkerPool;
     Engine::IDictionary const * pDictionary;
     UIData UI;
     BoardType CurrentBoardType;
-
-    // Non-null while NewGameBoard's word search is running in the background - see
-    // NewGameBoard's comment in ApplicationAPI.h for how this is driven.
-    Engine::IWordSearch * pActiveSearch;
-    std::chrono::steady_clock::time_point SearchStartTime;
+    std::optional<PendingBoardStart> PendingBoard;
   };
 }
 
