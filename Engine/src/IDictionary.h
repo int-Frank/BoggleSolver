@@ -18,7 +18,7 @@ namespace Engine
     struct WordSearchResult
     {
       bool IsWord;
-      uint32_t WordsBeginWith;
+      bool AnyWordsBeginWith;
     };
 
     // Words less than 3 letters are ignored.

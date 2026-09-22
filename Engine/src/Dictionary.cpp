@@ -9,17 +9,12 @@ namespace Engine
   {
   public:
 
-    bool isWord;
+    bool IsWord;
 
     // As entries are sorted, these are the indices of the first and last words beginning
     // with the three letters - we save this information for binary searching.
-    uint32_t firstEntry;
-    uint32_t lastEntry;
-
-    uint32_t Count() const
-    {
-      return lastEntry - firstEntry;
-    }
+    uint32_t FirstEntry;
+    uint32_t LastEntry;
   };
 
   class Dictionary : public IDictionary
@@ -87,8 +82,8 @@ namespace Engine
 
       if (pContext)
       {
-        first = pContext->firstEntry;
-        last = pContext->lastEntry;
+        first = pContext->FirstEntry;
+        last = pContext->LastEntry;
       }
 
       auto begin = m_wordEntryPoints.cbegin() + first;
@@ -101,11 +96,15 @@ namespace Engine
         });
 
       if (lowerBound == end)
-        return WordSearchResult{ false, 0 };
+        return WordSearchResult{ false, false };
+
+      // A string always sorts before any of its own extensions, so if any entry in
+      // [lowerBound, end) begins with word, lowerBound - the smallest such entry - is it.
+      std::string_view candidate = WordAt(*lowerBound);
 
       WordSearchResult result;
-      result.IsWord = WordAt(*lowerBound) == word;
-      result.WordsBeginWith = CountWordsStartWith(word, lowerBound, end);
+      result.AnyWordsBeginWith = candidate.size() >= word.size() && candidate.substr(0, word.size()) == word;
+      result.IsWord = result.AnyWordsBeginWith && candidate.size() == word.size();
 
       return result;
     }
@@ -114,11 +113,13 @@ namespace Engine
     {
       uint32_t key = ToKey(c);
 
+      // Every entry in a prefix map covers at least one word, so being found here
+      // always means AnyWordsBeginWith is true.
       auto it = m_oneLetterWords.find(key);
       if (it != m_oneLetterWords.cend())
-        return WordSearchResult{it->second.isWord, it->second.Count()};
+        return WordSearchResult{ it->second.IsWord, true };
 
-      return WordSearchResult{false, 0};
+      return WordSearchResult{ false, false };
     }
 
     WordSearchResult Search(char c0, char c1) const override
@@ -127,9 +128,9 @@ namespace Engine
 
       auto it = m_twoLetterWords.find(key);
       if (it != m_twoLetterWords.cend())
-        return WordSearchResult{ it->second.isWord, it->second.Count() };
+        return WordSearchResult{ it->second.IsWord, true };
 
-      return WordSearchResult{ false, 0 };
+      return WordSearchResult{ false, false };
     }
 
     WordSearchResult Search(char c0, char c1, char c2, Context const ** ppContext) const override
@@ -141,12 +142,12 @@ namespace Engine
       {
         if (ppContext)
           *ppContext = &it->second;
-        return WordSearchResult{ it->second.isWord, it->second.Count() };
+        return WordSearchResult{ it->second.IsWord, true };
       }
 
       if (ppContext)
         *ppContext = nullptr;
-      return WordSearchResult{ false, 0 };
+      return WordSearchResult{ false, false };
     }
 
     uint32_t MaxStoredWordLength() const override
@@ -175,28 +176,6 @@ namespace Engine
       }
 
       return true;
-    }
-
-    // lower_bound(prefix) lands on the lexicographically smallest entry that is
-    // either equal to prefix or extends it - since a string always sorts before
-    // any of its own extensions, every entry sharing this prefix forms a
-    // contiguous run starting exactly there, so we only ever need to scan forward.
-    uint32_t CountWordsStartWith(std::string_view prefix,
-                                  std::vector<Word>::const_iterator first,
-                                  std::vector<Word>::const_iterator last) const
-    {
-      uint32_t count = 0;
-
-      for (auto it = first; it != last; ++it)
-      {
-        std::string_view candidate = WordAt(*it);
-        if (candidate.size() < prefix.size() || candidate.substr(0, prefix.size()) != prefix)
-          break;
-
-        count++;
-      }
-
-      return count;
     }
 
     std::string_view WordAt(Word const & w) const
@@ -236,9 +215,9 @@ namespace Engine
         }
 
         Context context{};
-        context.isWord = word.size() == prefixLength;
-        context.firstEntry = i;
-        context.lastEntry = j;
+        context.IsWord = word.size() == prefixLength;
+        context.FirstEntry = i;
+        context.LastEntry = j;
         map.emplace(ToKey(prefix), context);
 
         i = j;
