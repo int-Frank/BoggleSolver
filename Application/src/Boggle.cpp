@@ -38,6 +38,7 @@ namespace
       case App::BoardType::Classic: return Engine::GenerateClassicBoggleGrid(pSeed);
       case App::BoardType::Big:     return Engine::GenerateBigBoggle(pSeed);
       case App::BoardType::Super:   return Engine::GenerateSuperBoggle(pSeed);
+      case App::BoardType::Mammoth: return Engine::GenerateCustomBoggle(100, 100, pSeed);
       case App::BoardType::Custom:  return Engine::GenerateCustomBoggle(width, height, pSeed);
       default:                      return Engine::GenerateModernBoggleGrid(pSeed);
     }
@@ -50,6 +51,7 @@ namespace
       case App::BoardType::Classic: return "Classic";
       case App::BoardType::Big:     return "Big";
       case App::BoardType::Super:   return "Super";
+      case App::BoardType::Mammoth: return "Mammoth";
       case App::BoardType::Custom:  return "Custom";
       default:                      return "Modern";
     }
@@ -85,7 +87,7 @@ namespace
     if (!ImGui::BeginPopupModal("New Board", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
       return false;
 
-    static char const * BoardTypes[] = { "Classic (4x4)", "Modern (4x4)", "Big (5x5)", "Super (6x6)", "Custom" };
+    static char const * BoardTypes[] = { "Classic (4x4)", "Modern (4x4)", "Big (5x5)", "Super (6x6)", "Mammoth (100x100)", "Custom" };
     static int boardTypeIndex = 1;
     static int customWidth = 4;
     static int customHeight = 4;
@@ -94,7 +96,7 @@ namespace
 
     ImGui::Combo("Board", &boardTypeIndex, BoardTypes, IM_ARRAYSIZE(BoardTypes));
 
-    if (boardTypeIndex == 4)
+    if (boardTypeIndex == 5)
     {
       ImGui::PushItemWidth(100.0f);
       ImGui::InputInt("Width", &customWidth);

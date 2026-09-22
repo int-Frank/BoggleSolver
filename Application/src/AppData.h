@@ -19,6 +19,7 @@ namespace App
     Modern,
     Big,
     Super,
+    Mammoth,
     Custom
   };
 
