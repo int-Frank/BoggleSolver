@@ -4,6 +4,8 @@
 
 #include "ApplicationAPI.h"
 
+#include "../resources/IconData.h"
+
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
@@ -263,6 +265,16 @@ namespace App
     {
       std::fprintf(stderr, "Error: SDL_CreateWindow(): %s\n", SDL_GetError());
       return false;
+    }
+
+    // Title-bar icon. The taskbar/Explorer icon instead comes from the
+    // embedded Win32 resource (resources/app.rc) baked into the .exe.
+    SDL_Surface* iconSurface = SDL_CreateSurfaceFrom(IconWidth, IconHeight, SDL_PIXELFORMAT_RGBA32,
+                                                      const_cast<unsigned char*>(IconPixels), IconWidth * 4);
+    if (iconSurface != nullptr)
+    {
+      SDL_SetWindowIcon(g_Window, iconSurface);
+      SDL_DestroySurface(iconSurface);
     }
 
     ImVector<const char*> instanceExtensions;

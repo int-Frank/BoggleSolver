@@ -56,6 +56,7 @@ workspace "BoggleSolver"
       "Application/3rdParty/ImGui/backends/imgui_impl_sdl3.cpp",
       "Application/3rdParty/ImGui/backends/imgui_impl_vulkan.h",
       "Application/3rdParty/ImGui/backends/imgui_impl_vulkan.cpp",
+      "Application/resources/app.rc",
     }
 
     includedirs
