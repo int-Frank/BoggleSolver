@@ -19,6 +19,11 @@ namespace Engine
       X = x;
       Y = y;
     }
+
+    bool operator==(Coord const & other) const
+    {
+      return X == other.X && Y == other.Y;
+    }
   };
 }
 

@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "IWordSearch.h"
 #include "Coord.h"
@@ -83,7 +84,17 @@ namespace Engine
     static void MergeSeedTask(void * pUserData) noexcept;
     static void FreeSeedTask(void * pUserData) noexcept;
 
-    static bool IsReversePath(std::vector<Coord> const & a, std::vector<Coord> const & b);
+    struct PathHash
+    {
+      size_t operator()(std::vector<Coord> const & path) const;
+    };
+
+    struct PathEqual
+    {
+      bool operator()(std::vector<Coord> const & a, std::vector<Coord> const & b) const;
+    };
+
+    static std::vector<Coord> const & CanonicalPath(std::vector<Coord> const & path, std::vector<Coord> & reversedScratch);
     static std::vector<WordData> RemovePalindromes(std::vector<WordData> results);
 
     void MergeResult(std::vector<WordData> & seedResult);
@@ -340,43 +351,62 @@ namespace Engine
     pContext->CapturedWords[it->second].Locations.push_back(std::move(path));
   }
 
-  bool WordSearch::IsReversePath(std::vector<Coord> const & a, std::vector<Coord> const & b)
+  size_t WordSearch::PathHash::operator()(std::vector<Coord> const & path) const
   {
-    if (a.size() != b.size())
-      return false;
+    size_t seed = path.size();
+    for (Coord const & c : path)
+      seed ^= (std::hash<int>{}(c.X) ^ (std::hash<int>{}(c.Y) << 1)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    return seed;
+  }
 
-    size_t count = a.size();
-    for (size_t i = 0; i < count; i++)
+  bool WordSearch::PathEqual::operator()(std::vector<Coord> const & a, std::vector<Coord> const & b) const
+  {
+    return a == b;
+  }
+
+  // Returns whichever of path/reverse(path) sorts first, so that a path and its
+  // reverse always map to the same canonical form. reversedScratch is caller-owned
+  // storage used only when the reversed form is the one returned.
+  std::vector<Coord> const & WordSearch::CanonicalPath(std::vector<Coord> const & path, std::vector<Coord> & reversedScratch)
+  {
+    size_t count = path.size();
+    for (size_t i = 0; i < count / 2; i++)
     {
-      Coord const & fromEnd = b[count - 1 - i];
-      if (a[i].X != fromEnd.X || a[i].Y != fromEnd.Y)
-        return false;
+      Coord const & fromStart = path[i];
+      Coord const & fromEnd = path[count - 1 - i];
+
+      if (fromStart.X != fromEnd.X || fromStart.Y != fromEnd.Y)
+      {
+        bool startIsSmaller = (fromStart.X != fromEnd.X) ? (fromStart.X < fromEnd.X) : (fromStart.Y < fromEnd.Y);
+        if (startIsSmaller)
+          return path;
+
+        reversedScratch.assign(path.rbegin(), path.rend());
+        return reversedScratch;
+      }
     }
 
-    return true;
+    // Path is a true palindrome - either direction is already canonical.
+    return path;
   }
 
   std::vector<WordData> WordSearch::RemovePalindromes(std::vector<WordData> results)
   {
     // For each word, find any location sequences which are the same forward as backward and eliminate one
+    std::unordered_set<std::vector<Coord>, PathHash, PathEqual> seenCanonical;
+    std::vector<Coord> reversedScratch;
+
     for (WordData & wordData : results)
     {
+      seenCanonical.clear();
+
       std::vector<std::vector<Coord>> keptLocations;
       keptLocations.reserve(wordData.Locations.size());
 
       for (auto & path : wordData.Locations)
       {
-        bool isDuplicateReverse = false;
-        for (auto const & keptPath : keptLocations)
-        {
-          if (IsReversePath(path, keptPath))
-          {
-            isDuplicateReverse = true;
-            break;
-          }
-        }
-
-        if (!isDuplicateReverse)
+        std::vector<Coord> const & canonical = CanonicalPath(path, reversedScratch);
+        if (seenCanonical.insert(canonical).second)
           keptLocations.push_back(std::move(path));
       }
 
