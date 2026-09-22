@@ -5,6 +5,7 @@
 #include "WordData.h"
 #include "IWorkerPool.h"
 #include "IDictionary.h"
+#include "IWordSearch.h"
 
 #include <chrono>
 #include <string>
@@ -50,6 +51,11 @@ namespace App
     Engine::IDictionary const * pDictionary;
     UIData UI;
     BoardType CurrentBoardType;
+
+    // Non-null while NewGameBoard's word search is running in the background - see
+    // NewGameBoard's comment in ApplicationAPI.h for how this is driven.
+    Engine::IWordSearch * pActiveSearch;
+    std::chrono::steady_clock::time_point SearchStartTime;
   };
 }
 
