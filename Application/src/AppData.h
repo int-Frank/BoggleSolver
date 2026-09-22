@@ -12,6 +12,15 @@
 
 namespace App
 {
+  enum class BoardType
+  {
+    Classic,
+    Modern,
+    Big,
+    Super,
+    Custom
+  };
+
   struct BoggleResult
   {
     std::vector<Engine::WordData> Words;
@@ -35,6 +44,7 @@ namespace App
     Engine::IWorkerPool * pWorkerPool;
     Engine::IDictionary const * pDictionary;
     UIData UI;
+    BoardType CurrentBoardType;
   };
 }
 

@@ -292,6 +292,12 @@ namespace App
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
 
+    // Replaces the implicit default (ProggyClean, a pixel-art bitmap font only crisp at
+    // its native 13px) with a real scalable TTF - ImGui 1.92's font system dynamically
+    // bakes a font at whatever size it's drawn at, so this stays sharp when the dice
+    // tiles request a larger size than the rest of the UI.
+    ImGui::GetIO().Fonts->AddFontFromFileTTF("3rdParty/ImGui/misc/fonts/Roboto-Medium.ttf", 18.0f);
+
     ImGui_ImplSDL3_InitForVulkan(g_Window);
     ImGui_ImplVulkan_InitInfo initInfo{};
     initInfo.Instance = g_Instance;

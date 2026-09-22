@@ -7,15 +7,13 @@
 
 namespace App
 {
-  // Add to Window.cpp - or a name befitting this code - it's kind of all the base framework code
   bool InitApplication();
   void BeginFrame();
-  bool IsDone(); // Do we want to exit?
+  bool IsDone();
   bool IsMinimised();
   void EndFrame();
   bool Shutdown();
 
-  // Add to Boggle.cpp - or a name befitting this code. It's essentially the application code
   void DoFrame(AppData *pData);
   bool DestroyAppData(AppData ** ppData);
   bool InitAppData(AppData ** ppData);

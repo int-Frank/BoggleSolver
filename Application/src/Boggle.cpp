@@ -29,6 +29,31 @@ namespace
     pData->UI.SelectionStartTime = std::chrono::steady_clock::now();
   }
 
+  // width/height are only used for BoardType::Custom - the other types have a fixed size.
+  Engine::Grid2D<char> GenerateBoard(App::BoardType type, unsigned int width, unsigned int height, unsigned int * pSeed)
+  {
+    switch (type)
+    {
+      case App::BoardType::Classic: return Engine::GenerateClassicBoggleGrid(pSeed);
+      case App::BoardType::Big:     return Engine::GenerateBigBoggle(pSeed);
+      case App::BoardType::Super:   return Engine::GenerateSuperBoggle(pSeed);
+      case App::BoardType::Custom:  return Engine::GenerateCustomBoggle(width, height, pSeed);
+      default:                      return Engine::GenerateModernBoggleGrid(pSeed);
+    }
+  }
+
+  char const * BoardTypeName(App::BoardType type)
+  {
+    switch (type)
+    {
+      case App::BoardType::Classic: return "Classic";
+      case App::BoardType::Big:     return "Big";
+      case App::BoardType::Super:   return "Super";
+      case App::BoardType::Custom:  return "Custom";
+      default:                      return "Modern";
+    }
+  }
+
   // Standard ImGui splitter idiom (see the ImGui wiki's "Widgets" page): draws and drives a
   // draggable divider between two regions whose combined size is assumed to stay constant.
   bool Splitter(bool splitVertically, float thickness, float * pSize1, float * pSize2, float minSize1, float minSize2)
@@ -88,18 +113,10 @@ namespace
       unsigned int seedStorage = static_cast<unsigned int>(seedValue);
       unsigned int * pSeed = useSeed ? &seedStorage : nullptr;
 
-      Engine::Grid2D<char> board = [&]() -> Engine::Grid2D<char>
-      {
-        switch (boardTypeIndex)
-        {
-          case 0: return Engine::GenerateClassicBoggleGrid(pSeed);
-          case 2: return Engine::GenerateBigBoggle(pSeed);
-          case 3: return Engine::GenerateSuperBoggle(pSeed);
-          case 4: return Engine::GenerateCustomBoggle(static_cast<unsigned int>(customWidth), static_cast<unsigned int>(customHeight), pSeed);
-          default: return Engine::GenerateModernBoggleGrid(pSeed);
-        }
-      }();
+      App::BoardType type = static_cast<App::BoardType>(boardTypeIndex);
+      Engine::Grid2D<char> board = GenerateBoard(type, static_cast<unsigned int>(customWidth), static_cast<unsigned int>(customHeight), pSeed);
 
+      pData->CurrentBoardType = type;
       App::NewGameBoard(board, pData);
       ImGui::CloseCurrentPopup();
     }
@@ -118,6 +135,18 @@ namespace
     if (ImGui::Button("New board"))
       ImGui::OpenPopup("New Board");
     DrawNewBoardPopup(pData);
+
+    ImGui::Separator();
+
+    ImGui::Text("Current board: %s", BoardTypeName(pData->CurrentBoardType));
+
+    if (ImGui::Button("Shake!"))
+    {
+      unsigned int boardWidth = static_cast<unsigned int>(pData->BoggleLayout.Width());
+      unsigned int boardHeight = static_cast<unsigned int>(pData->BoggleLayout.Height());
+      Engine::Grid2D<char> board = GenerateBoard(pData->CurrentBoardType, boardWidth, boardHeight, nullptr);
+      App::NewGameBoard(board, pData);
+    }
 
     ImGui::Spacing();
 
@@ -190,7 +219,7 @@ namespace
     const ImU32 tileColor = IM_COL32(245, 222, 179, 255);
     const ImU32 tileBorderColor = IM_COL32(120, 120, 120, 255);
     const ImU32 textColor = IM_COL32(30, 30, 30, 255);
-    const ImU32 pathColor = IM_COL32(196, 40, 40, 255);
+    const ImU32 pathColor = IM_COL32(232, 90, 90, 255);
 
     int cols = pData->BoggleLayout.Width();
     int rows = pData->BoggleLayout.Height();
@@ -214,7 +243,7 @@ namespace
     pDrawList->AddRect(origin, origin + traySize, trayBorderColor, TrayRounding, 2.0f);
 
     ImFont * pFont = ImGui::GetFont();
-    float letterFontSize = ImGui::GetFontSize() * 1.6f;
+    float letterFontSize = ImGui::GetFontSize() * 1.9f;
 
     // Tiles first, then the path line, then the letters on top - so the line passes
     // under the letters instead of over them.
@@ -232,7 +261,7 @@ namespace
 
     if (pData->UI.SelectedPath.size() >= 2)
     {
-      constexpr float PixelsPerSecond = 420.0f;
+      constexpr float PixelsPerSecond = 700.0f;
       constexpr float LineThickness = 5.0f;
 
       auto TileCenter = [&](Engine::Coord coord) -> ImVec2
@@ -244,6 +273,16 @@ namespace
       double elapsedSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - pData->UI.SelectionStartTime).count();
       float remainingLength = static_cast<float>(elapsedSeconds) * PixelsPerSecond;
 
+      // Cap each segment with filled circles at both ends - gives it a rounded-cap look,
+      // and smooths the joints where consecutive segments meet.
+      auto DrawSegment = [&](ImVec2 a, ImVec2 b)
+      {
+        pDrawList->AddLine(a, b, pathColor, LineThickness);
+        float radius = LineThickness * 0.5f;
+        pDrawList->AddCircleFilled(a, radius, pathColor);
+        pDrawList->AddCircleFilled(b, radius, pathColor);
+      };
+
       ImVec2 previousPoint = TileCenter(pData->UI.SelectedPath[0]);
       for (size_t i = 1; i < pData->UI.SelectedPath.size() && remainingLength > 0.0f; i++)
       {
@@ -253,13 +292,13 @@ namespace
 
         if (remainingLength >= segmentLength)
         {
-          pDrawList->AddLine(previousPoint, nextPoint, pathColor, LineThickness);
+          DrawSegment(previousPoint, nextPoint);
           remainingLength -= segmentLength;
         }
         else
         {
           float t = segmentLength > 0.0f ? remainingLength / segmentLength : 0.0f;
-          pDrawList->AddLine(previousPoint, previousPoint + segment * t, pathColor, LineThickness);
+          DrawSegment(previousPoint, previousPoint + segment * t);
           remainingLength = 0.0f;
         }
 
@@ -324,7 +363,8 @@ namespace App
       BoggleResult{},
       pWorkerPool,
       GetDictionary(),
-      UIData{}
+      UIData{},
+      BoardType::Modern
     };
 
     Engine::Grid2D<char> board = Engine::GenerateModernBoggleGrid(nullptr);
