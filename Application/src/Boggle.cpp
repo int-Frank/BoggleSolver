@@ -405,7 +405,25 @@ namespace
       }
     }
 
-    ImGui::Dummy(traySize);
+    // Covers the tray's footprint (same role Dummy played before) and doubles as a
+    // click-and-drag panning surface - handy for boards too big to fit the panel.
+    // Disabled when the whole board already fits, since there's nothing to pan to.
+    ImGui::InvisibleButton("BoardDragArea", traySize);
+
+    bool canScroll = traySize.x > avail.x || traySize.y > avail.y;
+
+    if (canScroll && ImGui::IsItemActive())
+    {
+      ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
+      ImVec2 dragDelta = ImGui::GetIO().MouseDelta;
+      ImGui::SetScrollX(ImGui::GetScrollX() - dragDelta.x);
+      ImGui::SetScrollY(ImGui::GetScrollY() - dragDelta.y);
+    }
+    else if (canScroll && ImGui::IsItemHovered())
+    {
+      ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
   }
 
   void DrawRightPanel(App::AppData * pData, float width)
