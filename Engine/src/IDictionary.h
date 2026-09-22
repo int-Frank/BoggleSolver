@@ -21,6 +21,7 @@ namespace Engine
       uint32_t WordsBeginWith;
     };
 
+    // Words less than 3 letters are ignored.
     // Words containing a 'q' not immediatly followed by a 'u' are ignored.
     // 'qu' is registerd as a single 'q'.
     static IDictionary * Create(std::set<std::string> const & words);
@@ -29,16 +30,15 @@ namespace Engine
 
     virtual WordSearchResult Search(char) const = 0;
 
-    // Once the word finder has two letters, check if any of these words exist - 
-    // We don't need to continue if for example no 'xf' words exist
     virtual WordSearchResult Search(char, char) const = 0;
 
-    // Once the word finder has three letters, check if any of these words exist - 
-    // We don't need to continue if for example no 'frg' words exist
-    // The idea here is that we have a has map of all the three letter combinations which are, or begin a word.
     virtual WordSearchResult Search(char, char, char, Context const ** ppContext) const = 0;
 
     virtual WordSearchResult Search(std::string_view word, Context const * pContext) const = 0;
+
+    // Length, in stored characters (i.e. after 'qu' has been collapsed to a single 'q'),
+    // of the longest word held by this dictionary.
+    virtual uint32_t MaxStoredWordLength() const = 0;
   };
 }
 

@@ -36,6 +36,7 @@ namespace Engine
 
     std::vector<Word> m_wordEntryPoints;
     std::vector<char> m_wordCharacters;
+    uint32_t m_maxWordLength = 0;
 
   public:
 
@@ -71,6 +72,7 @@ namespace Engine
 
         entry.length = (uint32_t)(m_wordCharacters.size() - entry.index);
         m_wordEntryPoints.push_back(entry);
+        m_maxWordLength = std::max(m_maxWordLength, entry.length);
       }
 
       BuildPrefixMap(1, m_oneLetterWords);
@@ -145,6 +147,11 @@ namespace Engine
       if (ppContext)
         *ppContext = nullptr;
       return WordSearchResult{ false, 0 };
+    }
+
+    uint32_t MaxStoredWordLength() const override
+    {
+      return m_maxWordLength;
     }
 
   private:

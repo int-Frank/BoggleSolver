@@ -1,4 +1,5 @@
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <unordered_map>
@@ -34,11 +35,21 @@ namespace Engine
         : pCharacterGrid(pCharacterGrid)
         , Visited(pCharacterGrid->Width(), pCharacterGrid->Height(), false)
         , CurrentLength(0)
-        , CharacterBlock(pCharacterGrid->Width() * pCharacterGrid->Height())
-        , PathBlock(pCharacterGrid->Width() * pCharacterGrid->Height())
+        , CharacterBlock(PathBufferSize(pCharacterGrid, pDictionary))
+        , PathBlock(PathBufferSize(pCharacterGrid, pDictionary))
         , pDictionaryContext(nullptr)
         , pDictionary(pDictionary)
       {
+      }
+
+      // A path can never usefully grow past the longest word the dictionary holds - one
+      // more than that to cover the speculative write ProcessSeed makes for the extending
+      // character it's about to find the dictionary has nothing matching (see ProcessSeed).
+      static size_t PathBufferSize(Grid2D<char> const * pCharacterGrid, IDictionary const * pDictionary)
+      {
+        size_t boardCells = (size_t)pCharacterGrid->Width() * (size_t)pCharacterGrid->Height();
+        size_t maxPathLength = (size_t)pDictionary->MaxStoredWordLength() + 1;
+        return std::min(boardCells, maxPathLength);
       }
     };
 
