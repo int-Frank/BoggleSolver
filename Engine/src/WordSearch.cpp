@@ -237,7 +237,17 @@ namespace Engine
     {
       char c0 = pContext->CharacterBlock[0];
       char c1 = pContext->CharacterBlock[1];
-      anyWordsBeginWith = pContext->pDictionary->Search(c0, c1).AnyWordsBeginWith;
+
+      auto result = pContext->pDictionary->Search(c0, c1);
+
+      // Need to check for 2 blocks as the sequence may contain a 'q'.
+      // 'q' expands to 'qu' which creats a valid 3-letter word.
+      if (result.IsWord)
+      {
+        CaptureCurrentWord(pContext);
+      }
+
+      anyWordsBeginWith = result.AnyWordsBeginWith;
     }
 
     else if (pContext->CurrentLength == 3)
