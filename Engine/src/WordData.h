@@ -2,6 +2,7 @@
 #define WORDDATA_H
 
 #include <vector>
+#include <string>
 
 #include "Coord.h"
 

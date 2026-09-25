@@ -51,6 +51,28 @@ namespace
     }
   }
 
+  void NewGameBoard(Engine::Grid2D<char> board, App::AppData * pData)
+  {
+    pData->BoggleLayout = board;
+    pData->UI = App::UIData{};
+
+    Engine::IWordSearch * pSearch = Engine::IWordSearch::Begin(&pData->BoggleLayout, pData->pWorkerPool, pData->pDictionary);
+
+    auto startTime = std::chrono::steady_clock::now();
+
+    std::vector<Engine::WordData> const * pResult = nullptr;
+    while ((pResult = pSearch->GetResult()) == nullptr)
+    {
+      pData->pWorkerPool->DoPostWork();
+      std::this_thread::yield();
+    }
+
+    pData->Result.Time = std::chrono::duration<double>(std::chrono::steady_clock::now() - startTime).count();
+    pData->Result.Words = *pResult;
+
+    delete pSearch;
+  }
+
   // Switches to board, either immediately (small boards) or via the "Working" popup dance
   // (see ProcessPendingBoardStart). Returns true if the caller still needs to open the
   // "Working" popup itself - see DrawNewBoardPopup's comment for why it must do that from
@@ -60,7 +82,7 @@ namespace
     int totalDice = board.Width() * board.Height();
     if (totalDice < App::AppData::DirectStartDiceThreshold)
     {
-      App::NewGameBoard(std::move(board), pData);
+      NewGameBoard(std::move(board), pData);
       return false;
     }
 
@@ -451,7 +473,7 @@ namespace
     if (std::chrono::steady_clock::now() - pData->PendingBoard->QueuedTime < MinWorkingPopupVisibleTime)
       return;
 
-    App::NewGameBoard(std::move(pData->PendingBoard->Board), pData);
+    NewGameBoard(std::move(pData->PendingBoard->Board), pData);
     pData->PendingBoard.reset();
   }
 }
@@ -532,27 +554,5 @@ namespace App
     DrawRightPanel(pData, rightPanelWidth);
 
     ImGui::End();
-  }
-
-  void NewGameBoard(Engine::Grid2D<char> board, AppData * pData)
-  {
-    pData->BoggleLayout = board;
-    pData->UI = UIData{};
-
-    Engine::IWordSearch * pSearch = Engine::IWordSearch::Begin(&pData->BoggleLayout, pData->pWorkerPool, pData->pDictionary);
-
-    auto startTime = std::chrono::steady_clock::now();
-
-    std::vector<Engine::WordData> const * pResult = nullptr;
-    while ((pResult = pSearch->GetResult()) == nullptr)
-    {
-      pData->pWorkerPool->DoPostWork();
-      std::this_thread::yield();
-    }
-
-    pData->Result.Time = std::chrono::duration<double>(std::chrono::steady_clock::now() - startTime).count();
-    pData->Result.Words = *pResult;
-
-    delete pSearch;
   }
 }

@@ -17,9 +17,6 @@ namespace App
   void DoFrame(AppData *pData);
   bool DestroyAppData(AppData ** ppData);
   bool InitAppData(AppData ** ppData);
-
-  // Sets the grid, runs the word search to completion and records the timed result in pData.
-  void NewGameBoard(Engine::Grid2D<char> board, AppData * pData);
 }
 
 #endif
